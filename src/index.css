@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Share Tech Mono", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Orbitron", sans-serif;
+  
+  --color-brand-red: #dc2626;
+  --color-brand-cyan: #0891b2;
+  --color-zinc-background: #0a0a0c;
+}
+
+body {
+  background: #0a0a0c;
+  color: white;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(220,38,38,0.05), transparent, rgba(8,145,178,0.05));
+  z-index: 1;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0a0a0c;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #18181b;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #27272a;
+}
+
+@media screen and (orientation: portrait) {
+  .landscape-container {
+    transform: rotate(90deg);
+    transform-origin: bottom left;
+    position: absolute;
+    top: -100vw;
+    left: 0;
+    height: 100vw;
+    width: 100vh;
+    overflow: hidden;
+  }
+}

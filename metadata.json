@@ -1,0 +1,10 @@
+{
+  "name": "Sovereign Strike: The Core Unlocked",
+  "description": "A high-octane fighting game engine inspired by Evil Zone and Urban Reign, featuring procedural jiggle physics and deep character customization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "COMBAT_ENGINE",
+    "PROCEDURAL_PHYSICS",
+    "CHARACTER_CUSTOMIZATION"
+  ]
+}
