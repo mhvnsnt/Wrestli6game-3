@@ -7,6 +7,7 @@ import { ProceduralCharacter } from './character';
 import { sounds } from './audio';
 import { MoveLibrary } from './moveLibrary';
 import { Particle, HitFlash, EnergyBolt, Sigil } from './effects';
+import { ScenePhysics } from './physics';
 
 const WEAPON_STATS: Record<Weapons, { dmg: number, reach: number, durability: number }> = {
     none: { dmg: 0, reach: 0, durability: 0 },
@@ -114,10 +115,17 @@ export class Fighter {
   limbDamage: { head: number, body: number, arms: number, legs: number } = { head: 0, body: 0, arms: 0, legs: 0 };
   pinProgress: number = 0;
   isBeingPinned: boolean = false;
+  isSubmitting: boolean = false;
+  isBeingSubmitted: boolean = false;
+  submissionMeter: number = 0;
+  inFacelock: boolean = false;
+  isStaggered: boolean = false;
   pinKickoutTarget: number = 0;
   pinMeterSpeed: number = 0.05;
   pinMeterPos: number = 0;
   worldW: number = 1200;
+  stamina: number = 100;
+  maxStamina: number = 100;
 
   currentMove: Move | null = null;
   moveStageIndex: number = 0;
@@ -125,6 +133,7 @@ export class Fighter {
   moveOriginalPos: { x: number, y: number, rot: number } = { x: 0, y: 0, rot: 0 };
   opponentOriginalPos: { x: number, y: number, rot: number } = { x: 0, y: 0, rot: 0 };
   walkToCornerTimer: number = 0;
+  poseState: string = 'idle';
 
   lightCD = 0; heavyCD = 0; specialCD = 0; ultraCD = 0;
   keys: Record<string, boolean> = {};
@@ -151,12 +160,12 @@ export class Fighter {
     // Weight dictates momentum and resistance
     this.weightClass = (heightFactor < 0.82) ? 'cruiser' : (heightFactor > 1.05 || charData.bodyType === 'heavy' ? 'super' : 'heavy');
     
-    this.maxHp = 100 * (1 + fat * 0.5 + muscle * 0.2); // Both contribute to durability
-    if (this.weightClass === 'super') this.maxHp += 50;
+    this.maxHp = 200 * (1.2 + fat * 0.5 + muscle * 0.2); // Doubled base HP for pacing
+    if (this.weightClass === 'super') this.maxHp += 100;
     this.hp = this.maxHp;
     
     // Calculated momentum specs
-    this.energyRegen = 0.11 * (1.2 - fat * 0.4); // Leaner builds regen faster
+    this.energyRegen = 0.08 * (1.2 - fat * 0.4); // Slower energy regen initially
     const speedMult = 1.0 * (1 - fat * 0.25) * (2 - heightFactor); 
     // Small fast guys vs big slow tanks
     
@@ -175,10 +184,9 @@ export class Fighter {
     }
   }
 
-  momentum = 0;
-  weight: number = 240; 
-  stamina = 100;
-  maxStamina = 100;
+  expressionScore: number = 0;
+  isRunning: boolean = false;
+  momentum: number = 0;
   
   onImpact(force: number, type: 'light' | 'heavy' | 'thud' | 'clank' | 'wood' | 'glass' | 'snap' | 'ring_bell') {
     if (force > 5) {
@@ -229,9 +237,13 @@ export class Fighter {
   applyDamage(dmg: number, kx: number, ky: number, type: AttackType, sigils: Sigil[], particles: Particle[], attacker?: Fighter) {
     if (this.state === 'dead') return;
 
-    if (dmg > 20) {
+    // Stamina influences damage resistance
+    const staminaDefense = 0.5 + (this.stamina / this.maxStamina) * 0.5;
+    let actualDmg = dmg / staminaDefense;
+
+    if (actualDmg > 20) {
         // Visceral blood spurt
-        const splashCount = Math.floor(dmg / 5);
+        const splashCount = Math.floor(actualDmg / 5);
         for(let i=0; i<splashCount; i++) {
             particles.push(new Particle(this.cx, this.cy, (Math.random()-0.5)*15, (Math.random()-0.5)*15, '#c00', 3, 120, false, this.groundY));
         }
@@ -242,39 +254,43 @@ export class Fighter {
 
     // Stun Meter Logic
     if (!this.isStunned) {
-        this.stunMeter += dmg * 0.8;
+        this.stunMeter += actualDmg * 0.9;
         if (this.stunMeter >= this.maxStunMeter) {
             this.isStunned = true;
             this.stunTimer = 180; // 3 seconds at 60fps
             this.stunMeter = this.maxStunMeter;
             sounds.playImpact('heavy'); // Stun feedback
+            if (this.isAI && Math.random() < 0.5) sounds.playCrowdReaction('cheer');
         }
     }
 
     // Limb Damage Logic
     if (type === 'ultra') {
-        this.limbDamage.head += dmg * 0.4;
-        this.limbDamage.body += dmg * 0.4;
+        this.limbDamage.head += actualDmg * 0.4;
+        this.limbDamage.body += actualDmg * 0.4;
     } else if (Math.abs(ky) > 15) {
-        this.limbDamage.head += dmg * 0.6;
+        this.limbDamage.head += actualDmg * 0.6;
     } else if (Math.abs(ky) < 5 && Math.abs(kx) > 10) {
-        this.limbDamage.legs += dmg * 0.5;
+        this.limbDamage.legs += actualDmg * 0.5;
     } else {
-        this.limbDamage.body += dmg * 0.5;
+        this.limbDamage.body += actualDmg * 0.5;
     }
 
     // Resiliency Logic
-    if (this.energy < 20 && !this.resiliencyUsed && this.char.cd.abilities?.includes('resiliency')) {
-        this.energy += 30;
+    if (this.hp < 15 && !this.resiliencyUsed && this.char.cd.abilities?.includes('resiliency')) {
+        this.hp += 25;
+        this.stamina = this.maxStamina;
         this.resiliencyUsed = true;
         this.isStunned = false; 
         this.stunMeter = 0;
-        sigils.push(new Sigil(this.cx, this.cy, '#00ff44')); // Green flash for resiliency
+        // Green flash for resiliency
+        // sigils.push(new Sigil(this.cx, this.cy, '#00ff44')); 
+        sounds.playCrowdReaction('cheer');
     }
 
     // Momentum loss on hit
-    this.sigMeter = Math.max(0, this.sigMeter - dmg * 0.2);
-    this.finMeter = Math.max(0, this.finMeter - dmg * 0.1);
+    this.sigMeter = Math.max(0, this.sigMeter - actualDmg * 0.3);
+    this.finMeter = Math.max(0, this.finMeter - actualDmg * 0.15);
 
     // Juggling Logic...
     let actualKy = ky;
@@ -285,19 +301,29 @@ export class Fighter {
     // Body Part Damage Logic
     const parts: (keyof BodyDamage)[] = ['head', 'body', 'arms', 'legs'];
     const hitPart = parts[Math.floor(Math.random() * parts.length)];
-    this.bodyDamage[hitPart] = Math.min(100, this.bodyDamage[hitPart] + dmg * 0.5);
+    this.bodyDamage[hitPart] = Math.min(100, this.bodyDamage[hitPart] + actualDmg * 0.5);
 
-    this.hp = Math.max(0, this.hp - dmg);
+    // Visceral Screen Shake trigger 
+    let hitstop = 0;
+    if (actualDmg > 10) hitstop = 2;
+    if (actualDmg > 25) hitstop = 6;
+    if (type === 'ultra') hitstop = 12;
+
+    this.hp = Math.max(0, this.hp - actualDmg);
     this.vx = kx * weightMult;
     this.vy = actualKy * weightMult;
     this.rv = (kx / 15) * weightMult; // Rotational torque
     
-    if (Math.abs(kx) > 10 || dmg > 25 || actualKy < -10) {
+    // VISCERAL SELLING (WWE 2K style)
+    const totalDamage = (this.maxHp - this.hp) / this.maxHp;
+    const sellDuration = Math.floor(30 + totalDamage * 120 + (1 - this.stamina/this.maxStamina) * 60);
+
+    if (Math.abs(kx) > 10 || actualDmg > 25 || actualKy < -10) {
         this.state = 'ragdoll';
-        this.stateTimer = 80;
+        this.stateTimer = sellDuration; // Dynamic sell time
         this.onGround = false;
         sounds.playImpact('heavy');
-        if (dmg > 30) sounds.playCrowdReaction('gasp');
+        if (actualDmg > 30) sounds.playCrowdReaction('gasp');
     } else {
         this.state = 'hurt';
         this.stateTimer = type === 'ultra' ? 48 : type === 'heavy' ? 30 : 18;
@@ -306,30 +332,40 @@ export class Fighter {
     }
     
     this.hurtFlash = true;
-    if (this.hp <= 0) { 
-        this.state = 'dead'; 
-        this.stateTimer = 9999; 
+    
+    if (attacker) {
+      const charismaMult = 1 + (attacker.charisma - 100) / 100;
+      const momGain = (actualDmg * 0.8) * charismaMult;
+      attacker.sigMeter = Math.min(100, attacker.sigMeter + momGain);
+      attacker.finMeter = Math.min(100, attacker.finMeter + momGain * 0.4);
+      attacker.stamina = Math.min(attacker.maxStamina, attacker.stamina + 5); // Adrenaline gain
     }
 
-    if (attacker) {
-      const momGain = (dmg * 0.6) * (1 + (attacker.charisma - 100) / 100);
-      attacker.sigMeter = Math.min(100, attacker.sigMeter + momGain);
-      attacker.finMeter = Math.min(100, attacker.finMeter + momGain * 0.5);
-    }
+    return hitstop;
   }
 
   spawnHitFX(x: number, y: number, color: string, particles: Particle[], bloodEnabled: boolean = true) {
-    // Standard Particles
-    for (let i = 0; i < 15; i++) {
-      const ang = Math.random() * Math.PI * 2, spd = 1 + Math.random() * 5;
-      particles.push(new Particle(x, y, Math.cos(ang) * spd, Math.sin(ang) * spd - 2,
-        Math.random() < 0.5 ? color : '#fff', 1.5 + Math.random() * 2.5, 18 + Math.random() * 18, false, this.groundY));
+    // REALISTIC IMPACT VFX (Sweat & Dust)
+    for (let i = 0; i < 12; i++) {
+      const ang = Math.random() * Math.PI * 2, spd = 0.5 + Math.random() * 3;
+      const isSweat = Math.random() < 0.6;
+      particles.push(new Particle(x, y, Math.cos(ang) * spd, Math.sin(ang) * spd - 1,
+        isSweat ? '#fff' : '#d2b48c', 0.8 + Math.random() * 1.5, 12 + Math.random() * 15, false, this.groundY));
     }
-    // Procedural Blood
+    
+    // Grime/Dirt if near ground
+    if (y > this.groundY - 50) {
+        for (let i = 0; i < 6; i++) {
+          const spd = 1 + Math.random() * 2;
+          particles.push(new Particle(x, y, (Math.random()-0.5)*spd, -Math.random()*spd, '#543', 2, 20, false, this.groundY));
+        }
+    }
+
+    // Procedural Blood (Subtle spray)
     if (bloodEnabled) {
-        for (let i = 0; i < 10; i++) {
-            const ang = Math.random() * Math.PI * 2, spd = 2 + Math.random() * 6;
-            particles.push(new Particle(x, y, Math.cos(ang) * spd, Math.sin(ang) * spd - 3, '#800', 1.5, 60, true, this.groundY));
+        for (let i = 0; i < 8; i++) {
+            const ang = Math.random() * Math.PI * 2, spd = 1 + Math.random() * 4;
+            particles.push(new Particle(x, y, Math.cos(ang) * spd, Math.sin(ang) * spd - 2, '#600', 1.2, 45, true, this.groundY));
         }
     }
   }
@@ -340,22 +376,44 @@ export class Fighter {
     const cooldownKey = cds[type] as keyof Fighter;
     if ((this[cooldownKey] as number) > 0) return;
     
-    const cost: Record<AttackType, number> = { light: 0, heavy: 5, special: 18, ultra: 35, grapple: 10, taunt: 0, whip: 5 };
-    if (this.energy < cost[type]) return;
+    // Stamina Cost Calculation
+    const staminaCost: Record<AttackType, number> = { 
+        light: 5, heavy: 15, special: 30, ultra: 50, grapple: 20, taunt: 0, whip: 15 
+    };
+    
+    if (this.stamina < staminaCost[type]) {
+        // "Gasping" state - too tired to attack
+        this.onImpact(1, 'thud');
+        return;
+    }
 
-    this.energy -= cost[type];
+    // Fatigued / Injured speeds
+    const injuryPenalty = (this.limbDamage.head + this.limbDamage.body + this.limbDamage.arms + this.limbDamage.legs) / 400;
+    const isFatigued = this.stamina < 30;
+    const speedMult = (isFatigued ? 1.35 : 1.0) + injuryPenalty;
+    const dmgMult = (isFatigued ? 0.75 : 1.0) * (1 - injuryPenalty * 0.5);
+
+    this.stamina -= staminaCost[type];
+    
     this.state = 'attack';
     this.attackType = type;
-    this.stateTimer = ({ light: 18, heavy: 28, special: 20, ultra: 32, grapple: 30, taunt: 60, whip: 25 } as Record<AttackType, number>)[type];
-    this.reverseWindow = 12; // First 12 frames can be reversed
-    (this[cooldownKey] as number) = ({ light: 22, heavy: 38, special: 52, ultra: 92, grapple: 45, taunt: 70, whip: 40 } as Record<AttackType, number>)[type];
+    
+    // Attack Timings (Broadcast pacing: Heavy moves have more weight)
+    const baseTimings: Record<AttackType, number> = { 
+        light: 18, heavy: 32, special: 24, ultra: 40, grapple: 35, taunt: 60, whip: 28 
+    };
+    this.stateTimer = Math.floor(baseTimings[type] * speedMult);
+    this.reverseWindow = Math.floor(14 * speedMult); // Reversal windows increase as you tire
+    (this[cooldownKey] as number) = Math.floor((baseTimings[type] * 1.2) * speedMult);
 
     const color = this.char.cd.sigil;
 
+    // LIMB TARGETING (Situational)
+    const targetLimb = (type === 'heavy' && Math.random() < 0.4) ? (['head', 'body', 'legs'][Math.floor(Math.random() * 3)] as any) : undefined;
+
     if (type === 'special' || type === 'ultra') {
-      projs.push(new EnergyBolt(this.cx + this.facing * 32, this.cy - 12, this.facing, color, type === 'ultra' ? 'ultra' : 'blade'));
-      sigils.push(new Sigil(this.cx + this.facing * 20, this.cy - 20, color));
-      if (type === 'ultra') sigils.push(new Sigil(this.cx, this.cy, color));
+      // sigils.push(new Sigil(this.cx + this.facing * 20, this.cy - 20, color));
+      // if (type === 'ultra') sigils.push(new Sigil(this.cx, this.cy, color));
     } else if (type === 'grapple') {
         const reach = 85;
         this.hitbox = {
@@ -365,7 +423,7 @@ export class Fighter {
         this.hitboxTimer = 15;
     } else {
       let reach = type === 'heavy' ? 75 : 55;
-      let dmg = type === 'heavy' ? 13 : 7;
+      let dmg = (type === 'heavy' ? 13 : 7) * dmgMult;
       let kx = type === 'heavy' ? 5 : 3;
       let ky = type === 'heavy' ? -5 : -3;
 
@@ -394,63 +452,137 @@ export class Fighter {
 
   runAI(opponent: Fighter, weapons: WeaponObject[]) {
     const dist = Math.abs(opponent.cx - this.cx);
-    const yDist = Math.abs(opponent.cy - this.cy);
+    const zDist = Math.abs(opponent.z - this.z);
+    const combinedDist = Math.sqrt(dist * dist + zDist * zDist);
+    const now = Date.now();
     
     // Clear keys
     const k: Record<string, boolean> = {
-        w: false, a: false, s: false, d: false, j: false, k: false, l: false, i: false, u: false, v: false, space: false
+        w: false, a: false, s: false, d: false, j: false, k: false, l: false, i: false, u: false, v: false, space: false, shift: false, e: false, q: false
     };
 
-    if (this.state === 'dead' || this.state === 'victory') {
+    if (this.state === 'dead' || this.state === 'victory' || this.state === 'cutscene') {
         this.keys = k;
         return;
     }
 
-    // Reaction to being attacked/stunned
-    if (this.state === 'stunned') {
-        // Hammer keys to recover?
-        if (Math.random() < 0.2) k.space = true;
+    if (this.isStunned) {
+        // Mash to recover from stun
+        if (now % 200 < 50) k.j = true;
         this.keys = k;
         return;
     }
 
-    // Facing
-    this.facing = opponent.cx > this.cx ? 1 : -1;
-
-    // Logic
-    if (dist > 150) {
-        // Move towards
-        if (opponent.cx > this.cx) k.d = true; else k.a = true;
-        // Sprint logic
-        if (dist > 300 && Math.random() < 0.05) k.space = true;
-    } else if (dist < 60) {
-        // Too close, move back or grapple
-        if (Math.random() < 0.3) {
-            if (opponent.cx > this.cx) k.a = true; else k.d = true;
-        } else {
-            k.l = true; // Grapple
-        }
-    } else {
-        // Optimal range for strikes
-        const roll = Math.random();
-        if (roll < 0.05) k.j = true; // Light
-        else if (roll < 0.08) k.k = true; // Heavy
-        else if (roll < 0.1) k.l = true; // Grapple
-        else if (roll < 0.12) k.i = true; // Special
-        else if (roll < 0.13) k.u = true; // Taunt/Ultra
+    // Reaction to opponent pin
+    if (this.isBeingPinned) {
+        // Kickout logic (simulated mashing/timing)
+        if (now % 150 < 40) k.j = true; 
+        this.keys = k;
+        return;
     }
 
-    // Reversal logic (High level AI only?)
-    if (opponent.reverseWindow > 0 && Math.random() < 0.15) {
-        k.v = true; // Reverse
+    // Facing logic for movement
+    const targetFacing = opponent.cx > this.cx ? 1 : -1;
+
+    // Tactical Positioning: Ring Awareness
+    const ringW = 1050; 
+    const centerX = 450;
+    const ringLeft = centerX - ringW / 2;
+    const ringRight = centerX + ringW / 2;
+    const inRing = this.x > ringLeft && this.x < ringRight - this.w && Math.abs(this.z) < 525;
+    
+    const isNearRopes = inRing && (Math.abs(this.x - ringLeft) < 100 || Math.abs(this.x - ringRight) < 100 || Math.abs(this.z - 525) < 100 || Math.abs(this.z + 525) < 100);
+
+    // AI PERSONALITY / STRATEGY
+    const isCowardly = this.hp < this.maxHp * 0.25 || this.stamina < 20;
+    const isAggressive = this.sigStocks > 0 || this.finStocks > 0 || (opponent.hp < opponent.maxHp * 0.4 && !isCowardly);
+
+    // Retreat if low stamina or HP
+    if (isCowardly && combinedDist < 250) {
+        if (opponent.cx > this.cx) k.a = true; else k.d = true;
+        if (opponent.z > this.z) k.w = true; else k.s = true;
+        if (this.stamina > 10 && Math.random() < 0.1) k.shift = true; // Run away
+        this.keys = k;
+        return;
     }
 
-    // Picking up weapons
-    if (this.weaponHeld === 'none' && dist > 200) {
-        const nearWeapon = weapons.find(w => Math.abs(w.x - this.cx) < 100);
+    // Weapon Hunting logic (Enhanced)
+    const needsWeapon = this.weaponHeld === 'none' && !isCowardly && (Math.random() < 0.1 || this.sigMeter < 20);
+    if (needsWeapon) {
+        const nearWeapon = weapons.find(w => !w.isBroken && Math.sqrt((w.x - this.cx)**2 + (w.z - this.z)**2) < 500);
         if (nearWeapon) {
             if (nearWeapon.x > this.cx) k.d = true; else k.a = true;
-            if (Math.abs(nearWeapon.x - this.cx) < 30) k.v = true;
+            if (nearWeapon.z > this.z) k.s = true; else k.w = true;
+            if (Math.abs(nearWeapon.x - this.cx) < 40 && Math.abs(nearWeapon.z - this.z) < 40) k.q = true; // Collect
+            this.keys = k;
+            return;
+        }
+    }
+
+    // Grounded Opponent logic
+    if (opponent.state === 'grounded' || opponent.state === 'ragdoll') {
+        if (combinedDist < 120) {
+            const roll = Math.random();
+            if (roll < 0.15 && opponent.hp < opponent.maxHp * 0.3) {
+                k.l = true; // PIN THEM!
+            } else if (roll < 0.4) {
+               k.j = true; // Ground Strike
+            } else if (roll < 0.6) {
+               k.k = true; // Ground Grapple / Submission
+            } else {
+               k.e = true; // Lift them up
+            }
+        } else {
+            // Move toward grounded opponent
+            if (opponent.cx > this.cx) k.d = true; else k.a = true;
+            if (opponent.z > this.z) k.s = true; else k.w = true;
+        }
+        this.keys = k;
+        return;
+    }
+
+    // Standard Combat Logic
+    if (combinedDist > 180) {
+        // Move towards
+        if (opponent.cx > this.cx) k.d = true; else k.a = true;
+        if (opponent.z > this.z) k.s = true; else k.w = true;
+        
+        // Sprint if far and aggressive
+        if (combinedDist > 300 && isAggressive && Math.random() < 0.05) k.shift = true;
+    } else if (combinedDist < 80) {
+        // Close range: Grapples and fast strikes
+        const roll = Math.random();
+        if (this.finStocks > 0 && Math.random() < 0.4) {
+            k.u = true; // FINISHER
+        } else if (this.sigStocks > 0 && Math.random() < 0.3) {
+            k.i = true; // SIGNATURE
+        } else if (roll < 0.3) {
+            k.l = true; // Grapple
+        } else if (roll < 0.6) {
+            k.j = true; // Quick Strike
+        } else if (roll < 0.8) {
+            k.k = true; // Strong Strike
+        } else {
+            // Circling logic
+            if (now % 2000 < 1000) k.w = true; else k.s = true;
+        }
+    } else {
+        // Medium range: Running attacks or approaching
+        const roll = Math.random();
+        if (this.isRunning && combinedDist < 150) {
+            if (roll < 0.5) k.j = true; else k.l = true; // Running strike or grapple
+        } else {
+            if (opponent.cx > this.cx) k.d = true; else k.a = true;
+            if (Math.random() < 0.05) k.j = true;
+        }
+    }
+
+    // Defensive Reflexes (Reversals)
+    if (opponent.reverseWindow > 0) {
+        // Difficult-adjusted reversal rate
+        const reversalChance = this.hp < this.maxHp * 0.3 ? 0.05 : 0.15;
+        if (Math.random() < reversalChance) {
+            k.i = true;
         }
     }
 
@@ -467,9 +599,110 @@ export class Fighter {
     const currentKeys = this.keys;
     this.lastOpponent = opponent;
 
-    // Rotation physics
-    this.rot += this.rv;
-    this.rv *= 0.95; // Drag
+    // Standardized Input Shortcuts (Xbox Layout Mapping)
+    const kJ = currentKeys.j; // X: Light Strike
+    const kK = currentKeys.k; // A: Grapple / Heavy
+    const kL = currentKeys.l; // B: Irish Whip / Pin
+    const kI = currentKeys.i; // Y: Reversal
+    const kRT = currentKeys.space; // RT: Modifier / Block
+    const kLT = currentKeys.shift; // LT: Run
+    const kRB = currentKeys.e; // RB: Target / Facelock
+    const kLB = currentKeys.q; // LB: Pick up / Climb
+    const kRun = kLT || this.isRunning;
+
+    const dist = Math.abs(opponent.cx - this.cx);
+    const zDist = Math.abs(opponent.z - this.z);
+    const combinedDist = Math.sqrt(dist * dist + zDist * zDist);
+    const isNearOpponent = combinedDist < 100;
+
+    // SPIRIT / REGEN SYSTEM (Pacing)
+    if (this.state !== 'dead' && this.state !== 'hurt' && this.state !== 'ragdoll' && this.state !== 'grappled') {
+        const healthFactor = this.hp / this.maxHp;
+        const canRegen = this.hp < this.maxHp * 0.85;
+        if (canRegen) this.hp += 0.012 * (this.stamina / this.maxStamina); // Healthy wrestlers recover faster
+        
+        // Stamina regen - Dynamic
+        const isResting = this.state === 'idle' || this.state === 'taunting';
+        const regenBonus = isResting ? (0.4 + (1 - healthFactor) * 0.2) : 0.08;
+        this.stamina = Math.min(this.maxStamina, this.stamina + regenBonus);
+    }
+
+    // SPRINT STAMINA DRAIN
+    if (this.state === 'running') {
+        this.stamina -= 0.35;
+        if (this.stamina <= 0) {
+            this.stamina = 0;
+            this.state = 'idle'; // Stop running if exhausted
+        }
+    }
+
+    // SITUATIONAL LOGIC (Predicaments)
+    if (this.state === 'idle' && isNearOpponent && kRB && !this.inFacelock) {
+        // Front Facelock Implementation
+        this.inFacelock = true;
+        this.state = 'attack';
+        this.attackType = 'grapple';
+        this.stateTimer = 60;
+        this.grappleTarget = opponent;
+        opponent.state = 'grappled';
+        opponent.stateTimer = 60;
+        sounds.playImpact('light');
+    }
+
+    // REVERSAL LOGIC (Broadcasting prompt)
+    if (opponent.state === 'attack' && opponent.reverseWindow > 0 && kI && !this.isGrappled) {
+        // SUCCESSFUL REVERSAL
+        this.onImpact(0, 'light');
+        this.state = 'attack';
+        this.attackType = 'heavy';
+        this.stateTimer = 40;
+        opponent.state = 'hurt';
+        opponent.stateTimer = 60;
+        opponent.reverseWindow = 0;
+        sounds.playCrowdReaction('gasp');
+        return;
+    }
+
+    // Submission Logic
+    if (this.isSubmitting || this.isBeingSubmitted) {
+        const victim = this.isBeingSubmitted ? this : this.grappleTarget;
+        const attacker = this.isSubmitting ? this : this.grappleTarget;
+        
+        if (victim && attacker) {
+            // Mashing Logic for Submissions
+            if (this === attacker) {
+                // Attacker mashing J/K/L to force tap
+                if (this.inputBuffer.some(b => now - b.time < 50)) {
+                    this.submissionMeter += 0.005;
+                }
+            } else if (this === victim) {
+                // Victim mashing space/wasd to escape
+                if (this.inputBuffer.some(b => now - b.time < 50)) {
+                    this.submissionMeter -= 0.008 * (this.stamina / this.maxStamina); // Healthy escaping is easier
+                }
+            }
+            
+            // AI Mashing
+            if (attacker.isAI) attacker.submissionMeter += 0.004;
+            if (victim.isAI) victim.submissionMeter -= 0.003;
+            
+            // Submission Meter Boundaries
+            if (this.submissionMeter > 1) {
+                // TAP OUT
+                victim.hp = 0;
+                victim.state = 'dead';
+                attacker.state = 'idle';
+                sounds.playCrowdReaction('cheer');
+            } else if (this.submissionMeter < 0) {
+                // ESCAPE
+                this.isSubmitting = false;
+                this.isBeingSubmitted = false;
+                attacker.state = 'hurt';
+                attacker.stateTimer = 40;
+                victim.state = 'idle';
+            }
+        }
+    }
     if (this.onGround) {
         this.rv *= 0.8;
         this.rot *= 0.9;
@@ -495,17 +728,29 @@ export class Fighter {
     // Momentum Logic (Per Frame)
     const charismaMult = 1 + (this.char.cd.charisma || 50) / 100;
     if (this.state !== 'dead' && this.state !== 'hurt') {
-        // Passive gain
-        this.sigMeter = Math.min(100, this.sigMeter + 0.05 * charismaMult);
-        this.finMeter = Math.min(100, this.finMeter + 0.025 * charismaMult);
+        // Passive gain (Scaled by charisma and stamina)
+        const staminaFactor = this.stamina / this.maxStamina;
+        this.sigMeter = Math.min(100, this.sigMeter + 0.05 * charismaMult * (0.5 + 0.5 * staminaFactor));
+        this.finMeter = Math.min(100, this.finMeter + 0.025 * charismaMult * (0.5 + 0.5 * staminaFactor));
 
         if (this.sigMeter >= 100 && this.sigStocks < 6) {
             this.sigMeter = 0;
             this.sigStocks++;
+            sounds.playImpact('snap'); // Feedback for stock gain
         }
         if (this.finMeter >= 100 && this.finStocks < 6) {
             this.finMeter = 0;
             this.finStocks++;
+            sounds.playImpact('snap');
+        }
+        
+        // Stamina Exhaustion Check
+        if (this.stamina <= 0 && !this.isStunned && this.state !== 'ragdoll') {
+            this.isStunned = true;
+            this.stunTimer = 120; // 2s stagger
+            this.stamina = 5; // Start recovery
+            sounds.playCrowdReaction('gasp');
+            this.state = 'idle'; // Reset to staggered idle
         }
     }
 
@@ -535,9 +780,42 @@ export class Fighter {
 
     // Pin logic (Victim perspective)
     if (this.isBeingPinned) {
+        // Needle speed increases as health decreases
+        const healthFactor = this.hp / this.maxHp;
+        this.pinMeterSpeed = 0.04 + (1 - healthFactor) * 0.06;
+        this.pinKickoutTarget = 0.1 + (healthFactor * 0.3); // Target window shrinks as health drops
+        
         this.pinMeterPos += this.pinMeterSpeed;
         if (this.pinMeterPos >= 1) this.pinMeterPos = 0;
         
+        // Check for Input
+        if (keys.j || keys.k || keys.l) {
+            const needle = this.pinMeterPos;
+            const targetMin = 0.5 - this.pinKickoutTarget / 2;
+            const targetMax = 0.5 + this.pinKickoutTarget / 2;
+            
+            if (needle >= targetMin && needle <= targetMax) {
+                // Success! Kick out!
+                this.isBeingPinned = false;
+                this.state = 'ragdoll';
+                this.stateTimer = 40;
+                this.vx = (this.facing > 0 ? -1 : 1) * 8;
+                this.vy = -6;
+                this.onGround = false;
+                sounds.playCrowdReaction('cheer');
+                if (this.grappleTarget) {
+                    this.grappleTarget.state = 'idle';
+                    this.grappleTarget.stateTimer = 0;
+                    this.grappleTarget.isGrappled = false;
+                    this.grappleTarget.grappleTarget = null;
+                }
+                this.grappleTarget = null;
+            } else {
+                // Mistimed - small penalty to speed?
+                this.pinMeterPos = 0;
+            }
+        }
+
         // Check if attacker has reached counts
         if (this.grappleTarget) {
             const pinTime = 180 - this.grappleTarget.stateTimer;
@@ -547,6 +825,7 @@ export class Fighter {
                 this.state = 'dead'; // 3 count!
                 this.hp = 0;
                 sounds.playImpact('heavy');
+                sounds.playCrowdReaction('cheer');
             }
         }
     }
@@ -614,8 +893,6 @@ export class Fighter {
           if (this.state === 'taunting' || this.attackType === 'taunt') {
               this.sigMeter = Math.min(100, this.sigMeter + 25);
               this.finMeter = Math.min(100, this.finMeter + 15);
-              // Visual signal
-              sigils.push(new Sigil(this.cx, this.cy, '#ffff00'));
           }
 
           // Finalize grapple damage if any
@@ -689,22 +966,29 @@ export class Fighter {
     }
 
     if (this.state === 'ragdoll') {
-      this.vx *= 0.95; this.vy += 0.55; this.x += this.vx; this.y += this.vy;
-      this.rot += this.vx * 0.05;
+      this.vx *= 0.93; // Heavier air friction
+      this.vy += 0.75; // Much heavier gravity (broadcast feel)
+      this.x += this.vx; this.y += this.vy;
+      this.rot += this.vx * 0.035;
       
       // Environmental Interaction: Weapons & Objects
       for (const w of worldWeapons) {
-          const dist = Math.sqrt((this.cx - w.x) ** 2 + (this.cy - w.y) ** 2);
-          if (dist < 45) {
+          const dist = Math.sqrt((this.cx - w.x) ** 2 + (this.cz - w.z) ** 2);
+          if (dist < 60) {
               // Impact with object
-              const impact = Math.abs(this.vx) + Math.abs(this.vy);
-              if (impact > 4) {
-                  this.applyDamage(impact * 1.5, 0, 0, 'light', sigils, particles);
+              const impact = Math.abs(this.vx) + Math.abs(this.vy) + Math.abs(this.vz);
+              if (impact > 5) {
+                  const weightDmgMult = this.weightClass === 'super' ? 1.5 : 1.0;
+                  this.applyDamage(impact * 1.8 * weightDmgMult, 0, 0, 'light', sigils, particles);
+                  
                   w.durability -= 1;
-                  w.vx += this.vx * 0.4;
-                  w.vy += this.vy * 0.2;
+                  w.vx += this.vx * 0.5;
+                  w.vy += this.vy * 0.3;
                   w.onGround = false;
                   
+                  // Screen Shake trigger (handled in Fight component via sound callback or similar usually, 
+                  // but here we just ensure the impact is felt)
+
                   // Specific Material Sounds
                   if (w.type === 'chair' || w.type === 'steel_steps' || w.type === 'stop_sign') {
                       sounds.playImpact('clank');
@@ -716,11 +1000,15 @@ export class Fighter {
                       sounds.playImpact('heavy');
                   }
 
-                  // Table Break Logic
-                  if (w.type === 'table' && impact > 10) {
+                  // Table Break Logic: Visual Shards
+                  if (w.type === 'table' && (impact > 12 || this.weightClass === 'super')) {
                       w.durability = 0;
                       w.isBroken = true;
                       sounds.playImpact('wood');
+                      // Spawn wood particles
+                      for(let i=0; i<15; i++) {
+                         particles.push(new Particle(w.x, w.y, (Math.random()-0.5)*10, -5-Math.random()*10, '#421', 4, 100, false, this.groundY));
+                      }
                   }
                   // Glass Tube Break Logic
                   if (w.type === 'glass_tube' && impact > 3) {
@@ -819,44 +1107,30 @@ export class Fighter {
       return 0;
     }
 
-    const kL = currentKeys.a || currentKeys.arrowleft;
-    const kR = currentKeys.d || currentKeys.arrowright;
-    const kJ = currentKeys.w || currentKeys.arrowup;
-    const kDown = currentKeys.s || currentKeys.arrowdown;
-    const kLt = currentKeys.j;
-    const kHv = currentKeys.k;
-    const kSp = currentKeys.l;
-    const kUl = currentKeys.u;
-    const kInteract = currentKeys.v; 
-    const kReverse = currentKeys.v; // Reusing V for reversal too if needed
-    const kTaunt = currentKeys.i;
-    const kRun = currentKeys.space;
-    const kGr = currentKeys.l;
-
     // Reversal / Combo Breaker logic (WWE 2K style)
     if (this.state === 'idle' || this.state === 'walk' || this.state === 'running' || this.state === 'stagger' || this.state === 'being_grappled') {
         if (opponent.reverseWindow > 0 || opponent.secondaryReverseWindow > 0) {
             let triggeredReversal = false;
             
             // 1. Standard Reversal Key (Y/Triangle style)
-            if (kReverse) triggeredReversal = true;
+            if (kI) triggeredReversal = true;
             
             // 2. Combo Breaker: Match the opponent's button
-            if (opponent.lastAttackKey === 'light' && kLt) triggeredReversal = true;
-            if (opponent.lastAttackKey === 'heavy' && kHv) triggeredReversal = true;
-            if (opponent.lastAttackKey === 'grapple' && kGr) triggeredReversal = true;
+            if (opponent.lastAttackKey === 'light' && kJ) triggeredReversal = true;
+            if (opponent.lastAttackKey === 'heavy' && kK) triggeredReversal = true;
+            if (opponent.lastAttackKey === 'grapple' && kK && kRT) triggeredReversal = true;
             
             if (triggeredReversal) {
                 this.executeReversal(opponent, projs, sigils, particles);
                 return 0;
             }
-        } else if (kReverse && !this.isReversing && this.state === 'idle') {
+        } else if (kI && !this.isReversing && this.state === 'idle') {
             // Whiffed reversal penalty
             this.isReversing = 15;
         }
     }
 
-    if (kTaunt && this.onGround && this.state === 'idle') {
+    if (currentKeys.i && this.onGround && this.state === 'idle') {
         this.state = 'taunting';
         this.stateTimer = 80;
         this.attackType = 'taunt';
@@ -880,18 +1154,14 @@ export class Fighter {
                     this.onGround = false;
                     this.walkToCornerTimer = 0;
                 }
-            } else {
-                this.walkToCornerTimer = 0;
             }
-        } else {
-            this.walkToCornerTimer = 0;
         }
     }
 
     if (this.state === 'on_turnbuckle' || this.state === 'on_turnbuckle_middle') {
         this.vx = 0; this.vy = 0;
-        if (kDown) { this.state = 'idle'; this.onGround = true; this.y = this.groundY - this.h; }
-        if (kLt || kHv) { this.executeAttack(kLt ? 'light' : 'heavy', projs, sigils, particles); return 0; }
+        if (currentKeys.s) { this.state = 'idle'; this.onGround = true; this.y = this.groundY - this.h; }
+        if (kJ || kK) { this.executeAttack(kJ ? 'light' : 'heavy', projs, sigils, particles); return 0; }
     }
 
     if (this.state === 'attack' && this.attackType === 'grapple' && this.grappleTarget) {
@@ -899,7 +1169,7 @@ export class Fighter {
             this.state = 'carrying';
             this.stateTimer = 180;
         }
-        if (kLt || kHv) {
+        if (kJ || kK) {
             this.throwOpponent(this.grappleTarget, projs, sigils, particles, worldWeapons);
             return 0;
         }
@@ -907,11 +1177,11 @@ export class Fighter {
 
     if (this.state === 'carrying' && this.grappleTarget) {
         let speed = kRun ? 3.5 : 1.5;
-        if (kL) { this.vx = -speed; this.facing = -1; }
-        else if (kR) { this.vx = speed; this.facing = 1; }
+        if (currentKeys.a) { this.vx = -speed; this.facing = -1; }
+        else if (currentKeys.d) { this.vx = speed; this.facing = 1; }
         else this.vx = 0;
 
-        if (kLt || kHv) {
+        if (kJ || kK) {
             this.throwOpponent(this.grappleTarget, projs, sigils, particles, worldWeapons);
         }
 
@@ -924,92 +1194,69 @@ export class Fighter {
         target.vy = 0;
     }
 
-    if (this.state === 'idle' || this.state === 'walk' || this.state === 'running') {
-      let speed = kRun ? 7.5 : 4.2;
-      if (kL) { this.vx = -speed; this.state = kRun ? 'running' : 'walk'; this.facing = -1; }
-      else if (kR) { this.vx = speed; this.state = kRun ? 'running' : 'walk'; this.facing = 1; }
+    if (this.state === 'idle' || this.state === 'walk' || this.state === 'running' || this.state === 'stagger') {
+      const staminaFactor = (this.stamina / this.maxStamina);
+      const speedMult = (staminaFactor * 0.3 + 0.7); // Low stamina slows you down
+      let speed = kLT ? 7.6 * speedMult : 4.2 * speedMult;
+      
+      if (currentKeys.a) { this.vx = -speed; this.state = kLT ? 'running' : 'walk'; this.facing = -1; }
+      else if (currentKeys.d) { this.vx = speed; this.state = currentKeys.shift ? 'running' : 'walk'; this.facing = 1; }
       else { 
-          this.vx *= 0.68; 
+          this.vx *= 0.72; 
+          if (this.state === 'running' || this.state === 'walk') this.state = 'idle';
       }
 
-      if (kJ && !this.onGround) { /* handled by jump logic */ }
-      if (kDown && this.onGround) this.z = Math.min(150, this.z + speed * 0.5);
-      if (kJ && this.onGround && !keys['shift']) this.z = Math.max(-150, this.z - speed * 0.5);
+      const pW = currentKeys.w || currentKeys.arrowup;
+      const pS = currentKeys.s || currentKeys.arrowdown;
+      if (pW && this.onGround) this.z += speed * 0.5;
+      if (pS && this.onGround) this.z -= speed * 0.5;
 
-      if (kJ && this.onGround) { this.vy = -14; this.onGround = false; this.state = 'jump'; }
+      ScenePhysics.checkBounds(this, this.worldW);
+      ScenePhysics.checkTableBreaks(this, worldWeapons, particles);
+
+      // ATTACKS & GRAPPLES (Tactical Layout)
+      if (kJ) this.executeAttack(kRT ? 'heavy' : 'light', projs, sigils, particles);
+      if (kK) this.executeAttack('grapple', projs, sigils, particles);
       
-      // Kickout logic
-      if (this.isBeingPinned && kLt) {
-          this.kickout('meter');
-      }
-
-      // Interaction
-      if (kInteract) this.tryInteraction(opponent, worldWeapons, keys, sigils);
-      
-      // Taunt Logic
-      if (kInteract && !kLt && !kHv) {
-           const kModifier = keys['shift'] || keys['r'];
-           const ms = this.char.cd.moveset.taunts;
-           let pool = ms.standing;
-           if (this.state === 'idle') {
-               if (this.x < 50 || this.x > this.worldW - 50) pool = ms.apron;
-               let slot = 0;
-               if (kJ) slot = 0; else if (kDown) slot = 1; else if (kL) slot = 2; else if (kR) slot = 3;
-               if (kModifier) slot += 4;
-               const taunt = pool[slot] || pool[0];
-               if (taunt) {
-                   this.state = 'attack';
-                   this.attackType = 'taunt';
-                   this.stateTimer = taunt.time;
-                   if (slot === 0 || slot === 4) {
-                       if (opponent.onGround && (opponent.state === 'stunned' || opponent.state === 'ragdoll')) {
-                           opponent.state = 'stunned'; opponent.stateTimer = 120;
-                           opponent.onGround = false; opponent.y -= 30; opponent.vy = -2;
-                       }
-                   }
-                   this.stunMeter = Math.min(100, this.stunMeter + 10);
-               }
-           }
-      }
-      if (kSp) this.executeAttack('special', projs, sigils, particles);
-      if (kUl) this.executeAttack('ultra', projs, sigils, particles);
-
-      // Combo Grapple Ender
-      if (kGr && this.comboCount > 0 && this.onGround && this.state === 'idle') {
-          const dist = Math.abs(this.cx - opponent.cx);
-          if (dist < 80) {
-              this.lastAttackKey = 'grapple';
-              const ms = this.char.cd.moveset;
-              const move = ms.grapples[0] || ms.grapples[Math.floor(Math.random() * 5)];
-              if (move) {
-                  this.executeSpecificMove(move, opponent, sigils);
-                  this.comboCount = 0;
-                  return 0;
-              }
+      // PIN / WHIP Context
+      if (kL && this.onGround && this.state === 'idle') {
+          if (isNearOpponent && (opponent.state === 'grounded' || opponent.state === 'ragdoll')) {
+              this.tryPin(opponent);
+          } else if (isNearOpponent) {
+              this.executeAttack('whip', projs, sigils, particles);
           }
       }
 
-      if (kGr && this.onGround && this.state === 'idle') {
-          this.executeAttack('grapple', projs, sigils, particles);
-          return 0;
+      // TAUNT (Contextual DPAD)
+      if (currentKeys.t) {
+           const ms = this.char.cd.moveset.taunts;
+           let pool = ms.standing;
+           if (this.state === 'idle' && pool.length > 0) {
+               const taunt = pool[Math.floor(Math.random() * pool.length)];
+               this.state = 'attack';
+               this.attackType = 'taunt';
+               this.stateTimer = taunt.time;
+               this.stunMeter = Math.min(100, this.stunMeter + 15);
+               sounds.playCrowdReaction('cheer');
+           }
       }
-      
-      // Pin check
-      if (kInteract && opponent.state === 'grounded' && Math.abs(this.cx - opponent.cx) < 60) {
-          return 'start_pin';
+
+      // Modifier Actions (Blocking)
+      if (kRT && this.state === 'idle') {
+          this.isReversing = 10; // Active block frames
       }
     }
 
     // Grapple State Inputs (when performing a grapple)
     if (this.state === 'attack' && this.attackType === 'grapple' && this.grappleTarget) {
         const dir = { 
-          x: kL ? -1 : (kR ? 1 : 0), 
-          y: kJ ? -1 : (kDown ? 1 : 0) 
+          x: currentKeys.a ? -1 : (currentKeys.d ? 1 : 0), 
+          y: currentKeys.w ? -1 : (currentKeys.s ? 1 : 0) 
         };
         const anyThis = (this as any);
-        if (kLt) { anyThis.grappleAction('light', dir, sigils); return 0; }
-        if (kHv) { anyThis.grappleAction('heavy', dir, sigils); return 0; }
-        if (kInteract) { anyThis.grappleAction('whip', dir, sigils); return 0; }
+        if (currentKeys.j) { anyThis.grappleAction('light', dir, sigils); return 0; }
+        if (currentKeys.k) { anyThis.grappleAction('heavy', dir, sigils); return 0; }
+        if (currentKeys.l) { anyThis.grappleAction('whip', dir, sigils); return 0; }
     }
     if (this.state === 'attack' && this.onGround) this.vx *= 0.5;
 
@@ -1040,6 +1287,20 @@ export class Fighter {
     if (this.animTimer > 7) { this.animTimer = 0; this.animFrame = (this.animFrame + 1) % 4; }
 
     this.char.updatePhysics(this.cx, this.cy, this.facing, this.vx, this.vy);
+
+    // Sync poseState for 3D engine refined animations
+    this.poseState = this.state;
+    if (this.state === 'attack') {
+        if (this.attackType === 'light') this.poseState = 'strike-light';
+        else if (this.attackType === 'heavy') this.poseState = 'strike-heavy';
+        else if (this.attackType === 'grapple' || this.attackType === 'special' || this.attackType === 'ultra') {
+             this.poseState = this.currentMove?.animation || 'grappling';
+        }
+    } else if (this.state === 'idle' && this.isStunned) {
+        this.poseState = 'stagger';
+    } else if (this.isBeingSubmitted || this.isBeingPinned) {
+        this.poseState = 'ragdoll';
+    }
 
     // Collision check melee (moved from end of update)
     if (this.hitbox && this.hitboxTimer > 0) {
@@ -1105,39 +1366,60 @@ export class Fighter {
 
     if (this.state === 'dead' || this.state === 'hurt' || this.state === 'grappled') return;
 
+    // Use Context-Aware standardized keys
+    const kRTModifier = this.keys.space; // RT Modifier
+    const isHold = this.inputBuffer.some(b => b.key === (type === 'light' ? 'j' : 'k') && (Date.now() - b.time > 150));
+
     const isBack = opponent.facing === this.facing;
     const isGrounded = opponent.state === 'grounded' || (opponent.state === 'ragdoll' && opponent.onGround);
     const pos = this.checkPosition();
-    const worldW = 1000;
 
-    const key = type === 'light' ? (this.isP2 ? 'k' : 'u') : 
-                type === 'heavy' ? (this.isP2 ? 'l' : 'i') : 
-                type === 'special' ? (this.isP2 ? "'" : 'h') : (this.isP2 ? 'p' : 'j');
-                
-    const holdTimer = this.buttonHoldTimers[key] || 0;
-    const isHold = holdTimer > 15;
+    // Special moves (Signature/Finisher - Space + Attack)
+    if (kRTModifier && (this.keys.j || this.keys.k)) {
+        if (this.sigStocks > 0 || this.finStocks > 0) {
+            const moveType = this.finStocks > 0 ? 'finisher' : 'signature';
+            this[moveType === 'finisher' ? 'finStocks' : 'sigStocks']--;
+            this.performComplexMove(moveType, isHold, opponent, projs, sigils, particles);
+            return;
+        }
+    }
 
-    // Special moves
-    if ((type === 'special' && this.sigStocks > 0) || (type === 'ultra' && this.finStocks > 0)) {
-        const moveType = type === 'special' ? 'signature' : 'finisher';
-        this[type === 'special' ? 'sigStocks' : 'finStocks']--;
-        if (type === 'special') this.finStocks = Math.min(6, this.finStocks + 1);
-        this.performComplexMove(moveType, isHold, opponent, projs, sigils, particles);
-        this.buttonHoldTimers[key] = 0;
-        return;
+    // Catch finishers logic
+    if (!this.onGround && opponent.state === 'attack' && this.sigStocks > 0) {
+        // Diving catch? (conceptual)
     }
 
     // Determine move pool based on situation
     const ms = this.char.cd.moveset;
     let pool: Move[] = [];
     
+    // Diving Attacks
+    if (this.state === 'on_turnbuckle' || this.state === 'on_turnbuckle_middle') {
+        pool = isGrounded ? ms.divingGround : ms.divingStanding;
+        if (!pool || pool.length === 0) pool = ms.heavy; // Fallback
+        
+        const move = pool[0]; // Take primary diving move
+        if (move) {
+            this.state = 'attack';
+            this.attackType = 'heavy';
+            this.currentMove = move;
+            this.stateTimer = move.time || 60;
+            this.vy = -5;
+            this.vx = (opponent.cx - this.cx) / 10; // Launch towards opponent
+            this.onGround = false;
+            sounds.playImpact('heavy');
+            return;
+        }
+    }
+
     // Opponent states
     const isSeated = opponent.state === 'seated' || opponent.state === 'corner_seated';
     const isKneeling = opponent.state === 'kneeling';
 
     if (isGrounded) {
-        if (Math.abs(this.cx - opponent.cx) < 40) pool = ms.groundHead;
-        else if (Math.abs(this.cx - opponent.cx) < 100) pool = ms.groundSide;
+        const distToOpp = Math.abs(this.cx - opponent.cx);
+        if (distToOpp < 50) pool = ms.groundHead;
+        else if (distToOpp < 120) pool = ms.groundSide;
         else pool = ms.groundFeet;
     } else if (isSeated) {
         pool = ms.groundSeated;
@@ -1146,27 +1428,11 @@ export class Fighter {
     } else if (pos === 'corner') {
         if (isBack) pool = ms.cornerBack;
         else if (opponent.state === 'corner_seated') pool = ms.cornerSeated;
-        else if (opponent.state === 'tree_of_woe') pool = ms.treeOfWoe;
         else pool = ms.cornerFront;
-    } else if (this.state === 'on_turnbuckle' || this.state === 'on_turnbuckle_middle') {
-        pool = opponent.state === 'on_turnbuckle' ? (isBack ? ms.topRopeBackSeated : ms.topRopeFrontSeated) : ms.divingStanding;
-    } else if (pos === 'apron') {
-        const oppOnApron = opponent.x < 50 || opponent.x > worldW - 50;
-        const selfOnApron = this.x < 50 || this.x > worldW - 50;
-        
-        if (selfOnApron && oppOnApron) pool = ms.apronToApron;
-        else if (selfOnApron && !oppOnApron) pool = isGrounded ? ms.apronSpringboardGround : ms.apronSpringboardStanding;
-        else if (!selfOnApron && oppOnApron) pool = ms.apronInsideToOutside;
+    } else if (this.state === 'running') {
+        pool = type === 'grapple' ? ms.runningGrapple : (type === 'heavy' ? ms.runningHeavy : ms.runningStrike);
     } else if (isBack) {
         pool = ms.backGrapples;
-    } else if (pos === 'aerial') {
-        pool = isGrounded ? ms.divingGround : ms.divingStanding;
-    } else if (pos === 'running' || this.state === 'running' || this.isRebounding > 0) {
-        if (this.isRebounding > 0) {
-            pool = type === 'grapple' ? ms.reboundGrapple : (type === 'heavy' ? ms.reboundHeavy : ms.reboundStrike);
-        } else {
-            pool = type === 'grapple' ? ms.runningGrapple : (type === 'heavy' ? ms.runningHeavy : ms.runningStrike);
-        }
     } else {
         // Neutral Standing
         if (type === 'light') pool = ms.light;
@@ -1282,9 +1548,9 @@ export class Fighter {
       // Damage & Knockback
       opponent.applyDamage(move.dmg, this.facing * move.kx, move.ky, this.attackType, sigils, particles);
       
-      // Final flash
-      const flashColor = type === 'signature' ? '#00ccff' : '#ff2244';
-      sigils.push(new Sigil(opponent.cx, opponent.cy, flashColor));
+      // Final flash removed for realism
+      // const flashColor = type === 'signature' ? '#00ccff' : '#ff2244';
+      // sigils.push(new Sigil(opponent.cx, opponent.cy, flashColor));
   }
 
   tryInteraction(opponent: Fighter, weapons: WeaponObject[], keys: any, sigils: Sigil[]) {
@@ -1607,6 +1873,7 @@ export class Fighter {
         id: 'w_' + Date.now(),
         type: this.weaponHeld,
         x: this.cx, y: this.cy - 10,
+        z: this.z,
         vx: this.facing * 5, vy: -4,
         rotation: 0, rv: this.facing * 0.2,
         onGround: false,

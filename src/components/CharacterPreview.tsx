@@ -43,7 +43,11 @@ export const CharacterPreview: React.FC<CharacterPreviewProps> = ({ data, classN
     };
 
     const resizeObserver = new ResizeObserver(() => {
-      char3dRef.current?.resize();
+      if (!char3dRef.current) {
+        init3D();
+      } else {
+        char3dRef.current.resize();
+      }
     });
     
     init3D();

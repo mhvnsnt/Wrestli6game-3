@@ -143,16 +143,20 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
 
   const hasChanged = JSON.stringify(cd) !== JSON.stringify(initialData);
 
+  const handleBack = () => {
+    if (view === 'edit') {
+      if (hasChanged) setShowExitModal(true);
+      else setView('roster');
+    } else {
+      onCancel();
+    }
+  };
+
   useEffect(() => {
     const handleGlobalKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (key === 'escape' || key === 'b') {
-        if (view === 'edit') {
-            if (hasChanged) setShowExitModal(true);
-            else setView('roster');
-        } else {
-            onCancel();
-        }
+        handleBack();
       }
     };
     window.addEventListener('keydown', handleGlobalKey);
@@ -560,7 +564,7 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
         <div className="font-['Orbitron'] text-3xl font-black italic text-white tracking-tighter uppercase transform -skew-x-[12deg]">
             SUPERSTAR CUSTOMIZER // <span className="text-red-600">EDITOR</span>
         </div>
-        <button onClick={() => setView('roster')} className="text-[10px] font-black tracking-[4px] text-zinc-500 hover:text-white flex items-center gap-2 uppercase">
+        <button onClick={handleBack} className="text-[10px] font-black tracking-[4px] text-zinc-500 hover:text-white flex items-center gap-2 uppercase">
             <ChevronLeft size={14} /> BACK_TO_ROSTER
         </button>
       </div>

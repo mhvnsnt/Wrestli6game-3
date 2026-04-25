@@ -13,26 +13,74 @@ import { MainMenu } from './components/MainMenu';
 import { MatchReport } from './components/MatchReport';
 import { TournamentMode } from './components/TournamentMode';
 import { GameModes } from './components/GameModes';
-import { CharacterData, GameState, GameOptions, getDefaultCharData } from './types';
+import { CharacterData, GameState, GameOptions, getDefaultCharData, ArenaData } from './types';
 import { ControllerUI } from './components/ControllerUI';
 import { ROSTER } from './data/roster';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserCog, Play, Gamepad2 } from 'lucide-react';
 
-import { ArenaSelection, ARENAS } from './components/ArenaSelection';
+import { ArenaSelection, ARENAS as BASE_ARENAS } from './components/ArenaSelection';
 import { CreationSuite } from './components/CreationSuite';
 import { IntroSequence } from './components/IntroSequence';
 import { TitleScreen } from './components/TitleScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { PromoScreen } from './components/PromoScreen';
 import { Cutscene } from './components/Cutscene';
+import { MatchRating } from './components/MatchRating';
 
 export default function App() {
-  const [superstars, setSuperstars] = useState<CharacterData[]>(ROSTER);
+  const [superstars, setSuperstars] = useState<CharacterData[]>(() => {
+    const saved = localStorage.getItem('SOVEREIGN_ROSTER');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return ROSTER;
+      }
+    }
+    return ROSTER;
+  });
+  const [customArenas, setCustomArenas] = useState<ArenaData[]>(() => {
+    const saved = localStorage.getItem('SOVEREIGN_ARENAS');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [customTitles, setCustomTitles] = useState<any[]>(() => {
+    const saved = localStorage.getItem('SOVEREIGN_TITLES');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const allArenas = [...BASE_ARENAS, ...customArenas];
+
   const [uiVisible, setUiVisible] = useState(true);
   const [controllerEnabled, setControllerEnabled] = useState(true);
   const [lastActivity, setLastActivity] = useState(Date.now());
   const [selectedCustomIndex, setSelectedCustomIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('SOVEREIGN_ROSTER', JSON.stringify(superstars));
+  }, [superstars]);
+
+  useEffect(() => {
+    localStorage.setItem('SOVEREIGN_ARENAS', JSON.stringify(customArenas));
+  }, [customArenas]);
+
+  useEffect(() => {
+    localStorage.setItem('SOVEREIGN_TITLES', JSON.stringify(customTitles));
+  }, [customTitles]);
 
   const [gameOptions, setGameOptions] = useState<GameOptions>({
     difficulty: 'normal',
@@ -54,7 +102,7 @@ export default function App() {
     p1CPU: false,
     p2CPU: true,
     championship: undefined,
-    arena: ARENAS[0],
+    arena: BASE_ARENAS[0],
     p1Damage: { head: 0, body: 0, arms: 0, legs: 0 },
     p2Damage: { head: 0, body: 0, arms: 0, legs: 0 },
     pinProgress: 0,
@@ -66,6 +114,8 @@ export default function App() {
     isGameOver: false,
     winnerName: null,
     timer: 99,
+    matchRating: 0,
+    highlightEvent: null,
     stats: {
       p1: { strikes: 0, momentum: 0, hp: 100 },
       p2: { strikes: 0, momentum: 0, hp: 100 }
@@ -75,8 +125,39 @@ export default function App() {
   const [promoText, setPromoText] = useState<string | null>(null);
   const [activeCutscene, setActiveCutscene] = useState<{ type: any; char1: any; char2: any } | null>(null);
   const [activeMode, setActiveMode] = useState<'exhibition' | 'career' | 'gm' | 'universe' | 'faction' | 'tournament' | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
-  const navigateWithLoading = (screen: 'intro' | 'title' | 'menu' | 'selection' | 'arena' | 'loading' | 'fight' | 'creation_suite' | 'tournament' | 'career' | 'gm' | 'universe' | 'faction' | 'match_selection' | 'cutscene' | 'promo', delay: number = 1500) => {
+  useEffect(() => {
+    const handleGlobalKeys = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      
+      // Pause handling
+      if (key === 'escape' || key === 'p') {
+        const pausableScreens = ['fight', 'promo', 'cutscene'];
+        if (pausableScreens.includes(fightState.currentScreen) && !fightState.isGameOver) {
+          setIsPaused(prev => !prev);
+        }
+      } 
+      
+      // Back handling (Global B / Escape for some menus)
+      else if (key === 'b' || (key === 'escape' && !['fight', 'promo', 'cutscene'].includes(fightState.currentScreen))) {
+         const backableScreens = ['arena', 'select', 'tournament', 'career', 'gm', 'universe', 'faction', 'creation', 'match_selection', 'promo', 'cutscene'];
+         if (backableScreens.includes(fightState.currentScreen)) {
+            if (fightState.currentScreen === 'promo' || fightState.currentScreen === 'cutscene') {
+                setIsPaused(false);
+                setFightState(prev => ({ ...prev, currentScreen: 'menu', matchPhase: 'intro' }));
+            } else {
+                setFightState(prev => ({ ...prev, currentScreen: 'menu' }));
+            }
+            setIsPaused(false);
+         }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeys);
+    return () => window.removeEventListener('keydown', handleGlobalKeys);
+  }, [fightState.currentScreen, fightState.isGameOver]);
+
+  const navigateWithLoading = (screen: 'intro' | 'title' | 'menu' | 'selection' | 'arena' | 'loading' | 'fight' | 'creation' | 'tournament' | 'career' | 'gm' | 'universe' | 'faction' | 'match_selection' | 'cutscene' | 'promo', delay: number = 1500) => {
       setFightState(prev => ({ ...prev, currentScreen: 'loading' }));
       setTimeout(() => {
           setFightState(prev => ({ ...prev, currentScreen: screen }));
@@ -84,8 +165,8 @@ export default function App() {
   };
 
   const [hudState, setHudState] = useState({
-    p1: { hp: 100, energy: 60, sigMeter: 0, finMeter: 0, sigStocks: 0, finStocks: 0, data: superstars[0], combo: 0, bodyDamage: {head:0,body:0,arms:0,legs:0} },
-    p2: { hp: 100, energy: 60, sigMeter: 0, finMeter: 0, sigStocks: 0, finStocks: 0, data: superstars[1], combo: 0, bodyDamage: {head:0,body:0,arms:0,legs:0} },
+    p1: { hp: 100, energy: 60, stamina: 100, maxStamina: 100, sigMeter: 0, finMeter: 0, sigStocks: 0, finStocks: 0, data: superstars[0], combo: 0, bodyDamage: {head:0,body:0,arms:0,legs:0} },
+    p2: { hp: 100, energy: 60, stamina: 100, maxStamina: 100, sigMeter: 0, finMeter: 0, sigStocks: 0, finStocks: 0, data: superstars[1], combo: 0, bodyDamage: {head:0,body:0,arms:0,legs:0} },
   });
 
   useEffect(() => {
@@ -121,8 +202,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fightState.currentScreen, fightState.matchPhase, fightState.isGameOver, fightState.timer]);
 
-  const handleUpdate = useCallback((p1: any, p2: any) => {
+  const handleUpdate = useCallback((p1: any, p2: any, rating: { score: number, event: string | null }) => {
     setHudState({ p1, p2 });
+    setFightState(prev => ({ ...prev, matchRating: rating.score, highlightEvent: rating.event }));
   }, []);
 
   const handleGameOver = (winnerName: string | null) => {
@@ -203,7 +285,7 @@ export default function App() {
         )}
 
         {fightState.currentScreen === 'title' && (
-            <TitleScreen onStart={() => setFightState(prev => ({ ...prev, currentScreen: 'menu' }))} />
+            <TitleScreen key="title_screen" onStart={() => setFightState(prev => ({ ...prev, currentScreen: 'menu' }))} />
         )}
 
         {fightState.currentScreen === 'loading' && (
@@ -219,6 +301,7 @@ export default function App() {
                    setFightState(prev => ({ ...prev, currentScreen: 'fight', matchPhase: 'entrance' }));
                    if (fightState.p1.entrance?.music) import('./engine/audio').then(m => m.sounds.playTheme(fightState.p1.entrance!.music));
                }}
+               isPaused={isPaused}
             />
         )}
 
@@ -231,6 +314,7 @@ export default function App() {
                   setFightState(prev => ({ ...prev, currentScreen: 'fight', matchPhase: 'entrance' }));
                   if (fightState.p1.entrance?.music) import('./engine/audio').then(m => m.sounds.playTheme(fightState.p1.entrance!.music));
               }}
+              isPaused={isPaused}
             />
         )}
 
@@ -247,9 +331,10 @@ export default function App() {
                     setFightState(prev => ({...prev, matchCategory: category, matchType: type}));
                     navigateWithLoading('arena');
                 }}
-                onOpenCreationSuite={() => navigateWithLoading('creation' as any)}
+                onOpenCreationSuite={() => navigateWithLoading('creation')}
                 onStartTournament={() => navigateWithLoading('tournament')}
                 onEnterMode={(mode) => navigateWithLoading(mode as any)}
+                onLogout={() => setFightState(prev => ({ ...prev, currentScreen: 'intro' }))}
                 gameOptions={gameOptions}
                 setGameOptions={setGameOptions}
                 superstars={superstars}
@@ -259,6 +344,7 @@ export default function App() {
 
         {fightState.currentScreen === 'arena' && (
             <ArenaSelection 
+              arenas={allArenas}
               onBack={() => setFightState(prev => ({ ...prev, currentScreen: 'menu' }))}
               onConfirm={(arena) => setFightState(prev => ({ ...prev, currentScreen: 'select', arena }))}
             />
@@ -267,8 +353,10 @@ export default function App() {
         {(['career', 'gm', 'universe', 'faction'] as const).includes(fightState.currentScreen) && (
             <GameModes 
                 mode={fightState.currentScreen as any}
-                playerChar={fightState.p1}
+                playerChar={fightState.p1 || superstars[0]}
+                superstars={superstars}
                 onBack={() => setFightState(prev => ({ ...prev, currentScreen: 'menu' }))}
+                onStartMatch={(p1, p2, title) => startMatch(p1, false, p2, true, title)}
             />
         )}
 
@@ -304,6 +392,14 @@ export default function App() {
                 });
                 setFightState(prev => ({ ...prev, p1: data, currentScreen: 'menu' }));
             }}
+            onSaveArena={(arena) => {
+                setCustomArenas(prev => [...prev, arena]);
+                setFightState(prev => ({ ...prev, currentScreen: 'menu' }));
+            }}
+            onSaveTitle={(title) => {
+                setCustomTitles(prev => [...prev, title]);
+                setFightState(prev => ({ ...prev, currentScreen: 'menu' }));
+            }}
           />
         )}
 
@@ -325,36 +421,48 @@ export default function App() {
               matchCategory={fightState.matchCategory}
               matchType={fightState.matchType}
               matchPhase={fightState.matchPhase}
+              isPaused={isPaused}
               onUpdate={handleUpdate}
               onPhaseChange={(phase) => setFightState(prev => ({ ...prev, matchPhase: phase }))}
               onGameOver={handleGameOver}
             />
-            
-            <FighterHUD 
-               side="left" 
-               hp={hudState.p1.hp} 
-               energy={hudState.p1.energy} 
-               sigMeter={hudState.p1.sigMeter}
-               finMeter={hudState.p1.finMeter}
-               sigStocks={hudState.p1.sigStocks}
-               finStocks={hudState.p1.finStocks}
-               combo={hudState.p1.combo} 
-               data={hudState.p1.data}
-               bodyDamage={hudState.p1.bodyDamage}
-            />
 
-            <FighterHUD 
-               side="right" 
-               hp={hudState.p2.hp} 
-               energy={hudState.p2.energy} 
-               sigMeter={hudState.p2.sigMeter}
-               finMeter={hudState.p2.finMeter}
-               sigStocks={hudState.p2.sigStocks}
-               finStocks={hudState.p2.finStocks}
-               combo={hudState.p2.combo} 
-               data={hudState.p2.data}
-               bodyDamage={hudState.p2.bodyDamage}
-            />
+            <AnimatePresence>
+              {(fightState.matchPhase === 'fight' || fightState.matchPhase === 'victory') && (
+                <>
+                  <MatchRating score={fightState.matchRating} highlightEvent={fightState.highlightEvent} />
+                  <FighterHUD 
+                    side="left" 
+                    hp={hudState.p1.hp} 
+                    energy={hudState.p1.energy} 
+                    stamina={hudState.p1.stamina}
+                    maxStamina={hudState.p1.maxStamina}
+                    sigMeter={hudState.p1.sigMeter}
+                    finMeter={hudState.p1.finMeter}
+                    sigStocks={hudState.p1.sigStocks}
+                    finStocks={hudState.p1.finStocks}
+                    combo={hudState.p1.combo} 
+                    data={hudState.p1.data}
+                    bodyDamage={hudState.p1.bodyDamage}
+                  />
+
+                  <FighterHUD 
+                    side="right" 
+                    hp={hudState.p2.hp} 
+                    energy={hudState.p2.energy} 
+                    stamina={hudState.p2.stamina}
+                    maxStamina={hudState.p2.maxStamina}
+                    sigMeter={hudState.p2.sigMeter}
+                    finMeter={hudState.p2.finMeter}
+                    sigStocks={hudState.p2.sigStocks}
+                    finStocks={hudState.p2.finStocks}
+                    combo={hudState.p2.combo} 
+                    data={hudState.p2.data}
+                    bodyDamage={hudState.p2.bodyDamage}
+                  />
+                </>
+              )}
+            </AnimatePresence>
             
             <AnimatePresence>
               {fightState.isGameOver && (
@@ -370,9 +478,56 @@ export default function App() {
             </AnimatePresence>
           </motion.div>
         )}
+
+        <AnimatePresence>
+          {isPaused && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="bg-[#0f0f11] border border-zinc-800 p-12 max-w-sm w-full -skew-x-[6deg]"
+              >
+                <div className="skew-x-[6deg] space-y-8">
+                    <div>
+                      <h2 className="text-4xl font-black italic text-white uppercase tracking-tighter">SIGNAL_<span className="text-red-600">PAUSED</span></h2>
+                      <div className="h-1 w-full bg-red-600/20 mt-2"><div className="h-full bg-red-600 w-1/3 shadow-[0_0_10px_rgba(220,38,38,0.5)]" /></div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={() => setIsPaused(false)}
+                        className="w-full py-4 bg-white text-black font-black uppercase text-[10px] tracking-[4px] hover:bg-red-600 hover:text-white transition-all shadow-lg"
+                      >
+                        RESUME_COMBAT
+                      </button>
+                      <button 
+                        className="w-full py-4 border border-zinc-800 bg-zinc-900/50 text-zinc-400 font-black uppercase text-[10px] tracking-[4px] hover:text-white hover:border-zinc-600 transition-all"
+                        onClick={() => {
+                            setIsPaused(false);
+                            setFightState(prev => ({ ...prev, currentScreen: 'menu', matchPhase: 'intro' }));
+                        }}
+                      >
+                        EXIT_TO_HUB
+                      </button>
+                    </div>
+                    
+                    <div className="pt-8 border-t border-zinc-900 text-[8px] font-bold text-zinc-700 tracking-[4px] uppercase flex justify-between">
+                      <span>CORE_v.2.5.0</span>
+                      <span>ENCRYPTED_SIGNAL_STABLE</span>
+                    </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
 
-      <ControllerUI onInput={handleTouchInput} isVisible={uiVisible && controllerEnabled} />
+      <ControllerUI onInput={handleTouchInput} isVisible={uiVisible && controllerEnabled && (['fight', 'promo', 'cutscene'].includes(fightState.currentScreen))} />
 
       <motion.button
         whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.2)' }}

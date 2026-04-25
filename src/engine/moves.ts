@@ -113,3 +113,98 @@ export function createCornerMove(name: string, type: 'corner_bomb' | 'top_rope_b
     };
 }
 
+export function createFinisher(name: string, type: 'stunner' | 'rko' | 'german' | 'bulldog'): Move {
+    const stages: MoveStage[] = [];
+    if (type === 'stunner') {
+        stages.push({ time: 10, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 0, y: 0, rot: 0.2 }, sound: 'light' }); // Kick gut
+        stages.push({ time: 25, p1Pos: { x: 0, y: 0, rot: 3.14 }, p2Pos: { x: 10, y: -10, rot: 0.8 } }); // Headlock
+        stages.push({ time: 45, p1Pos: { x: 0, y: 80, rot: 3.14 }, p2Pos: { x: 15, y: 70, rot: 1.5 }, sound: 'heavy' }); // Sitdown
+    } else if (type === 'rko') {
+        stages.push({ time: 15, p1Pos: { x: 0, y: -40, rot: 0 }, p2Pos: { x: 10, y: 0, rot: 0.5 } }); // Jump
+        stages.push({ time: 35, p1Pos: { x: 20, y: 120, rot: 1.5 }, p2Pos: { x: 30, y: 120, rot: 2.5 }, sound: 'heavy' }); // Slam
+    } else if (type === 'german') {
+        stages.push({ time: 25, p1Pos: { x: -10, y: 0, rot: 0 }, p2Pos: { x: 5, y: -10, rot: 0 } }); // Waistlock
+        stages.push({ time: 55, p1Pos: { x: 0, y: 80, rot: -1.2 }, p2Pos: { x: 25, y: -80, rot: 3.14 }, sound: 'heavy' }); // Bridge
+    } else if (type === 'bulldog') {
+        stages.push({ time: 20, p1Pos: { x: 0, y: -20, rot: 0 }, p2Pos: { x: 15, y: 0, rot: 0.8 } }); // Chase/Grab
+        stages.push({ time: 45, p1Pos: { x: 30, y: 140, rot: 0 }, p2Pos: { x: 45, y: 140, rot: 1.8 }, sound: 'heavy' }); // Jump/Faceplant
+    }
+    
+    return {
+        name,
+        dmg: 38,
+        kx: 4,
+        ky: -12,
+        time: stages.reduce((acc, s) => acc + s.time, 0),
+        category: 'standing',
+        animation: 'ultra',
+        stages
+    };
+}
+
+export function createIconicMove(name: string, type: 'tombstone' | 'f5' | 'aa' | 'rock_bottom' | 'pedigree' | 'sharpshooter'): Move {
+    const stages: MoveStage[] = [];
+    if (type === 'tombstone') {
+        stages.push({ time: 35, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 5, y: -70, rot: 3.14 } }); // Shoulder pick up
+        stages.push({ time: 65, p1Pos: { x: 0, y: 80, rot: 0 }, p2Pos: { x: 5, y: 150, rot: 3.14 }, sound: 'heavy' }); // Sitdown spike
+    } else if (type === 'f5') {
+        stages.push({ time: 40, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 0, y: -80, rot: 1.5 } }); // Fireman's carry
+        stages.push({ time: 75, p1Pos: { x: 20, y: 0, rot: 0 }, p2Pos: { x: 60, y: 40, rot: 6.28 }, sound: 'heavy' }); // Spin and toss
+    } else if (type === 'aa') {
+        stages.push({ time: 35, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 0, y: -80, rot: 1.5 } }); // Fireman's carry
+        stages.push({ time: 65, p1Pos: { x: 10, y: 0, rot: 0 }, p2Pos: { x: 50, y: 30, rot: 1.5 }, sound: 'heavy' }); // Toss
+    } else if (type === 'rock_bottom') {
+        stages.push({ time: 20, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 10, y: -40, rot: 0 } }); // Lift
+        stages.push({ time: 45, p1Pos: { x: 30, y: 140, rot: 0 }, p2Pos: { x: 40, y: 140, rot: 0 }, sound: 'heavy' }); // Slam
+    } else if (type === 'pedigree') {
+        stages.push({ time: 25, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 5, y: -20, rot: 1.5 } }); // Set up
+        stages.push({ time: 55, p1Pos: { x: 0, y: 100, rot: 0 }, p2Pos: { x: 10, y: 110, rot: 1.5 }, sound: 'heavy' }); // Spike
+    } else if (type === 'sharpshooter') {
+        stages.push({ time: 40, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 10, y: 0, rot: -1.5 } }); // Step through
+        stages.push({ time: 200, p1Pos: { x: -10, y: 0, rot: -0.5 }, p2Pos: { x: 15, y: 10, rot: -1.5 } }); // Lean back
+    }
+    
+    return {
+        name,
+        dmg: type === 'sharpshooter' ? 8 : 45,
+        kx: 5,
+        ky: -8,
+        time: stages.reduce((acc, s) => acc + s.time, 0),
+        category: 'standing',
+        animation: 'ultra',
+        stages,
+        isSubmission: type === 'sharpshooter'
+    };
+}
+
+export function createGenericStrike(name: string, type: 'headbutt' | 'knee' | 'elbow'): Move {
+    return {
+        name,
+        dmg: type === 'headbutt' ? 18 : 12,
+        kx: 3,
+        ky: -4,
+        time: 35,
+        category: 'standing',
+        animation: type === 'headbutt' ? 'strike_heavy' : 'strike'
+    };
+}
+
+export function createSubmission(name: string, type: 'head' | 'arm' | 'leg'): Move {
+    const stages: MoveStage[] = [
+        { time: 40, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 10, y: 0, rot: 0.5 } }, // Lock in
+        { time: 200, p1Pos: { x: 0, y: 0, rot: 0 }, p2Pos: { x: 10, y: 0, rot: 0.5 } } // Hold (Conceptual)
+    ];
+    return {
+        name,
+        dmg: 5,
+        kx: 0,
+        ky: 0,
+        time: 240,
+        category: 'standing',
+        animation: 'grapple',
+        stages,
+        limbTarget: type as any,
+        isSubmission: true
+    };
+}
+

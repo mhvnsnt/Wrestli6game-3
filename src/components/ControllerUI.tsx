@@ -17,7 +17,8 @@ import {
   Zap,
   Shield,
   Crosshair,
-  User
+  User,
+  Pause
 } from 'lucide-react';
 
 interface ControllerUIProps {
@@ -105,22 +106,47 @@ export const ControllerUI: React.FC<ControllerUIProps> = ({ onInput, isVisible }
 
             {/* Special / Options (Center) */}
             <div className="pointer-events-auto flex gap-4 mb-4">
-               <Button btnKey="i" icon={User} color="purple" size="small" /> {/* Taunt */}
-               <Button btnKey="v" icon={Shield} color="orange" size="small" /> {/* Reverse */}
-               <Button btnKey="space" icon={Zap} color="yellow" size="small" /> {/* Run */}
+               <div className="flex flex-col items-center gap-1">
+                 <span className="text-[8px] uppercase opacity-40">Pause</span>
+                 <Button btnKey="p" icon={Pause} color="red" size="small" />
+               </div>
+               <div className="flex flex-col items-center gap-1">
+                 <span className="text-[8px] uppercase opacity-40">Block</span>
+                 <Button btnKey="space" icon={Shield} color="yellow" size="small" /> {/* RT */}
+               </div>
+               <div className="flex flex-col items-center gap-1">
+                 <span className="text-[8px] uppercase opacity-40">Target</span>
+                 <Button btnKey="e" icon={Crosshair} color="blue" size="small" /> {/* RB */}
+               </div>
+               <div className="flex flex-col items-center gap-1">
+                 <span className="text-[8px] uppercase opacity-40">Run</span>
+                 <Button btnKey="shift" icon={Zap} color="red" size="small" /> {/* LT */}
+               </div>
             </div>
 
             {/* Face Buttons (Right Side) */}
             <div className="pointer-events-auto flex flex-col items-center gap-2">
-              <Button btnKey="u" icon={Triangle} color="green" /> {/* Ultra */}
-              <div className="flex gap-2">
-                <Button btnKey="j" icon={Square} color="blue" /> {/* Light */}
-                <div className="w-16 h-16 flex items-center justify-center opacity-20">
-                   <Crosshair size={32} />
-                </div>
-                <Button btnKey="k" icon={Circle} color="red" /> {/* Heavy */}
+              <div className="flex flex-col items-center">
+                 <span className="text-[8px] uppercase opacity-40 mb-1">Reversal</span>
+                 <Button btnKey="i" icon={Triangle} color="green" /> {/* Y */}
               </div>
-              <Button btnKey="l" icon={Zap} color="zinc" /> {/* Special/Grapple */}
+              <div className="flex gap-2">
+                <div className="flex flex-col items-center">
+                  <span className="text-[8px] uppercase opacity-40 mb-1">Strike</span>
+                  <Button btnKey="j" icon={Square} color="blue" /> {/* X */}
+                </div>
+                <div className="w-16 h-16 flex items-center justify-center opacity-20">
+                   <Gamepad2 size={32} />
+                </div>
+                <div className="flex flex-col items-center">
+                   <span className="text-[8px] uppercase opacity-40 mb-1">Grapple</span>
+                   <Button btnKey="k" icon={Circle} color="red" /> {/* A */}
+                </div>
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="text-[8px] uppercase opacity-40 mt-1">Whip/Pin</span>
+                <Button btnKey="l" icon={Zap} color="zinc" /> {/* B */}
+              </div>
             </div>
           </div>
           

@@ -58,6 +58,126 @@ export class SpringNode {
   get dispY() { return this.y - this.ay; }
 }
 
+export class ScenePhysics {
+  static checkBounds(fighter: any, worldW: number) {
+    const ringW = 1050; // 10.5 * 100
+    const centerX = 450;
+    const ringLeft = centerX - ringW / 2;
+    const ringRight = centerX + ringW / 2;
+    const ringFront = 525;
+    const ringBack = -525;
+
+    // Ring Rope Physics (Elasticity)
+    const nearLeft = Math.abs(fighter.x - ringLeft) < 15;
+    const nearRight = Math.abs(fighter.x - (ringRight - fighter.w)) < 15;
+    const nearFront = Math.abs(fighter.z - ringFront) < 15;
+    const nearBack = Math.abs(fighter.z - ringBack) < 15;
+
+    const inRing = fighter.x > ringLeft && fighter.x < ringRight - fighter.w && fighter.z < ringFront && fighter.z > ringBack;
+
+    if (inRing) {
+        if (nearLeft || nearRight || nearFront || nearBack) {
+            const impactMod = 1 + (Math.abs(fighter.vx) + Math.abs(fighter.vz)) * 0.05;
+            if (fighter.state === 'running' || Math.abs(fighter.vx) > 10 || Math.abs(fighter.vz) > 10) {
+                fighter.isRebounding = 15;
+                fighter.vx *= -1.2;
+                fighter.vz *= -1.2;
+                
+                // Rope damage (stamina burn)
+                fighter.stamina = Math.max(0, fighter.stamina - 2 * impactMod);
+                
+                sounds.playImpact('snap');
+                if (impactMod > 1.5) sounds.playCrowdReaction('gasp');
+            } else {
+                // Hard boundary for non-running
+                if (nearLeft) fighter.x = ringLeft + 1;
+                if (nearRight) fighter.x = ringRight - fighter.w - 1;
+                if (nearFront) fighter.z = ringFront - 1;
+                if (nearBack) fighter.z = ringBack + 1;
+            }
+        }
+    } else {
+        // Outside Arena Boundaries (Railings/Walls)
+        const railDist = 1150;
+        const centerX = 450;
+        
+        if (Math.abs(fighter.x - centerX) > railDist/2) {
+            const impact = Math.abs(fighter.vx);
+            fighter.vx *= -0.5;
+            fighter.x = fighter.x > centerX ? centerX + railDist/2 : centerX - railDist/2;
+            
+            if (impact > 8) {
+                sounds.playImpact('clank');
+                fighter.applyDamage(impact * 1.5, 0, 0, 'heavy', [], [], null); // Rail impact damage
+            }
+        }
+        if (Math.abs(fighter.z) > railDist/2) {
+            const impact = Math.abs(fighter.vz);
+            fighter.vz *= -0.5;
+            fighter.z = fighter.z > 0 ? railDist/2 : -railDist/2;
+            
+            if (impact > 8) {
+                sounds.playImpact('clank');
+                fighter.applyDamage(impact * 1.5, 0, 0, 'heavy', [], [], null); // Wall impact damage
+            }
+        }
+    }
+  }
+
+  static checkTableBreaks(fighter: any, tables: any[], particles: any[]) {
+      for (const t of tables) {
+          if (t.isBroken) continue;
+          const dist = Math.sqrt((fighter.cx - t.x)**2 + (fighter.z - t.z)**2);
+          if (dist < 120) {
+              const impact = Math.abs(fighter.vx) + Math.abs(fighter.vy) + Math.abs(fighter.vz);
+              // Break table on high impact or ragdoll landing
+              if ((fighter.state === 'ragdoll' && fighter.vy > 5) || impact > 25) {
+                  t.isBroken = true;
+                  fighter.applyDamage(35, 0, 5, 'heavy', [], [], null);
+                  sounds.playImpact('wood');
+                  sounds.playCrowdReaction('gasp');
+                  
+                  // Wood shards
+                  for(let i=0; i<20; i++) {
+                      particles.push({
+                          x: t.x, y: t.y, vx: (Math.random()-0.5)*12, vy: -5-Math.random()*10,
+                          color: '#4a3322', size: 4, life: 120, isBlood: false, groundY: 380,
+                          update: function() { this.vy += 0.4; this.x += this.vx; this.y += this.vy; this.life--; }
+                      });
+                  }
+              }
+          }
+      }
+  }
+
+  static checkFighterCollision(f1: any, f2: any) {
+      const dx = f1.cx - f2.cx;
+      const dz = f1.z - f2.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      const minDist = (f1.w + f2.w) * 0.75;
+      
+      if (dist < minDist && f1.state !== 'grappled' && f2.state !== 'grappled') {
+          const overlap = minDist - dist;
+          const ang = Math.atan2(dz, dx);
+          const pushX = Math.cos(ang) * overlap * 0.5;
+          const pushZ = Math.sin(ang) * overlap * 0.5;
+          
+          f1.x += pushX;
+          f1.z += pushZ;
+          f2.x -= pushX;
+          f2.z -= pushZ;
+          
+          // Slight momentum transfer
+          const relVX = f1.vx - f2.vx;
+          if (Math.abs(relVX) > 5) {
+              f1.vx *= 0.8;
+              f2.vx *= 0.8;
+              if (Math.abs(relVX) > 12) sounds.playImpact('thud');
+          }
+      }
+  }
+}
+
 export class HairChain {
   nodes: SpringNode[];
   segLen: number;

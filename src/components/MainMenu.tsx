@@ -9,6 +9,7 @@ interface MainMenuProps {
   onOpenCreationSuite: () => void;
   onStartTournament: () => void;
   onEnterMode: (mode: 'career' | 'gm' | 'universe' | 'faction') => void;
+  onLogout: () => void;
   gameOptions: GameOptions;
   setGameOptions: (options: GameOptions) => void;
   superstars: any[];
@@ -21,6 +22,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onOpenCreationSuite, 
   onStartTournament,
   onEnterMode,
+  onLogout,
   gameOptions, 
   setGameOptions,
   superstars
@@ -32,6 +34,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
+      
+      if (showMatchSettings) {
+        if (key === 'escape' || key === 'b') {
+          setShowMatchSettings(false);
+        }
+        return; 
+      }
+
       if (key === 'u' || key === 'tab') {
         setActiveTabIdx(prev => (prev + 1) % TABS.length);
         setMenuFocusIdx(0);
@@ -75,14 +85,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             if (playActions[menuFocusIdx]) playActions[menuFocusIdx]();
         }
       }
-
-      if (showMatchSettings) {
-        return; 
-      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabIdx, menuFocusIdx, onStartExhibition, onStartTournament]);
+  }, [activeTabIdx, menuFocusIdx, showMatchSettings, onStartExhibition, onStartTournament, onEnterMode]);
 
   const renderPlayTab = () => (
     <div className="flex flex-col w-full h-full">
@@ -177,6 +183,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const renderOptionsTab = () => (
     <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 pt-8">
         <OptionGroup title="SIMULATION_PARAMETERS">
+            <OptionRow label="TERMINATE_SESSION">
+               <button 
+                 onClick={onLogout}
+                 className="w-full py-4 border border-red-600/30 text-red-600 bg-red-600/5 font-black uppercase text-[10px] tracking-[5px] hover:bg-red-600 hover:text-white transition-all italic"
+               >
+                  EXIT_AUDIT_PROTOCOL
+               </button>
+            </OptionRow>
             <OptionRow label="DIFFICULTY_THROTTLE">
                 <div className="flex gap-2">
                     {['easy', 'normal', 'hard', 'legend'].map(d => (

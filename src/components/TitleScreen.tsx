@@ -6,15 +6,29 @@ interface TitleScreenProps {
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart }) => {
+  const [canStart, setCanStart] = React.useState(false);
+
   useEffect(() => {
-    const handleKeyPress = () => onStart();
-    window.addEventListener('keydown', handleKeyPress);
-    window.addEventListener('mousedown', handleKeyPress);
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-      window.removeEventListener('mousedown', handleKeyPress);
+    // Grace period to prevent accidental triggers from intro sequence
+    const t = setTimeout(() => setCanStart(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const handleInput = (e: any) => {
+      if (!canStart) return;
+      e.stopPropagation();
+      onStart();
     };
-  }, [onStart]);
+
+    window.addEventListener('keydown', handleInput);
+    window.addEventListener('pointerdown', handleInput);
+    
+    return () => {
+      window.removeEventListener('keydown', handleInput);
+      window.removeEventListener('pointerdown', handleInput);
+    };
+  }, [onStart, canStart]);
 
   return (
     <motion.div 
@@ -22,7 +36,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart }) => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-[#050507] flex flex-col items-center justify-center z-[900] overflow-hidden cursor-pointer"
-      onClick={onStart}
+      onPointerDown={() => canStart && onStart()}
     >
       {/* Cinematic Aura/Glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">

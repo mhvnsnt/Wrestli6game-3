@@ -21,12 +21,25 @@ interface CreationSuiteProps {
   superstars: CharacterData[];
   onBack: () => void;
   onSaveCharacter: (data: CharacterData) => void;
+  onSaveArena: (arena: any) => void;
+  onSaveTitle: (title: any) => void;
 }
 
 type SuiteMode = 'hub' | 'superstar' | 'arena' | 'championship' | 'show';
 
-export const CreationSuite: React.FC<CreationSuiteProps> = ({ superstars, onBack, onSaveCharacter }) => {
+export const CreationSuite: React.FC<CreationSuiteProps> = ({ superstars, onBack, onSaveCharacter, onSaveArena, onSaveTitle }) => {
   const [mode, setMode] = useState<SuiteMode>('hub');
+
+  React.useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (mode === 'hub' && (key === 'b' || key === 'escape')) {
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [mode, onBack]);
 
   const HubCard = ({ title, icon: Icon, desc, onClick, color = 'red' }: any) => (
     <motion.button
@@ -172,9 +185,15 @@ export const CreationSuite: React.FC<CreationSuiteProps> = ({ superstars, onBack
             />
           </motion.div>
         ) : mode === 'arena' ? (
-           <ArenaCreator onCancel={() => setMode('hub')} />
+           <ArenaCreator 
+            onSave={onSaveArena}
+            onCancel={() => setMode('hub')} 
+           />
         ) : mode === 'championship' ? (
-           <ChampionshipCreator onCancel={() => setMode('hub')} />
+           <ChampionshipCreator 
+            onSave={onSaveTitle}
+            onCancel={() => setMode('hub')} 
+           />
         ) : (
            <ShowCreator onCancel={() => setMode('hub')} />
         )}
@@ -183,7 +202,28 @@ export const CreationSuite: React.FC<CreationSuiteProps> = ({ superstars, onBack
   );
 };
 
-const ArenaCreator = ({ onCancel }: any) => (
+const ArenaCreator = ({ onCancel, onSave }: any) => {
+  const [name, setName] = useState('CUSTOM_ARENA_' + Math.floor(Math.random() * 1000));
+  const [type, setType] = useState<'stadium' | 'gym' | 'backstage' | 'backyard'>('stadium');
+  const [lighting, setLighting] = useState('#ff0000');
+  const [matColor, setMatColor] = useState('#111111');
+  
+  const handleFinalize = () => {
+    onSave({
+      id: 'arena_' + Date.now(),
+      name,
+      lighting,
+      ringColor: '#0a0a0a',
+      apronColor: lighting,
+      matColor,
+      floorColor: '#050505',
+      barricadeColor: '#222',
+      showBackstage: type === 'backstage',
+      type
+    });
+  };
+
+  return (
   <motion.div 
     initial={{ opacity: 0, x: 100 }}
     animate={{ opacity: 1, x: 0 }}
@@ -207,9 +247,14 @@ const ArenaCreator = ({ onCancel }: any) => (
               <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
               <Layout size={64} className="text-zinc-800" />
               <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
-                 <div>
+                 <div className="flex-1 mr-4">
                     <p className="text-[10px] font-black text-blue-600 tracking-[4px] uppercase mb-1">CURRENT_RENDER</p>
-                    <p className="text-2xl font-black text-white italic uppercase tracking-tighter">PHANTOM_REIGN_ARENA</p>
+                    <input 
+                      type="text" 
+                      value={name}
+                      onChange={(e) => setName(e.target.value.toUpperCase())}
+                      className="w-full bg-transparent border-b border-zinc-800 text-2xl font-black text-white italic uppercase tracking-tighter outline-none focus:border-blue-600"
+                    />
                  </div>
                  <div className="flex gap-4">
                     <button className="p-3 bg-zinc-900 border border-zinc-800 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"><Settings size={16}/></button>
@@ -222,22 +267,43 @@ const ArenaCreator = ({ onCancel }: any) => (
               <div className="bg-zinc-900/40 border border-zinc-800 p-8 space-y-6">
                  <h4 className="text-[10px] font-black text-zinc-500 tracking-[4px] uppercase border-b border-zinc-800 pb-4">RIGGING_CONFIG</h4>
                  <div className="space-y-4">
-                    {['STAGE_SIZE', 'CROWD_DENSITY', 'LIGHTING_INTENSITY', 'SCREEN_SCALE'].map(s => (
-                       <div key={s} className="space-y-1">
+                    {[
+                      { label: 'STAGE_SIZE', val: 75 },
+                      { label: 'CROWD_DENSITY', val: 85 },
+                      { label: 'LIGHTING_PULSE', val: 60 },
+                      { label: 'REVERB_SCALE', val: 90 }
+                    ].map(s => (
+                       <div key={s.label} className="space-y-1">
                           <div className="flex justify-between text-[9px] font-black text-zinc-600 uppercase">
-                             <span>{s}</span>
-                             <span className="text-blue-600">75%</span>
+                             <span>{s.label}</span>
+                             <span className="text-blue-600">{s.val}%</span>
                           </div>
-                          <div className="h-1 bg-zinc-950"><div className="h-full bg-blue-600" style={{ width: '75%' }} /></div>
+                          <div className="h-1 bg-zinc-950"><div className="h-full bg-blue-600" style={{ width: `${s.val}%` }} /></div>
                        </div>
                     ))}
                  </div>
               </div>
               <div className="bg-zinc-900/40 border border-zinc-800 p-8 space-y-6">
-                 <h4 className="text-[10px] font-black text-zinc-500 tracking-[4px] uppercase border-b border-zinc-800 pb-4">MATERIAL_INDEX</h4>
+                 <h4 className="text-[10px] font-black text-zinc-500 tracking-[4px] uppercase border-b border-zinc-800 pb-4">LIGHTING_COLORS</h4>
                  <div className="grid grid-cols-4 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                       <div key={i} className="aspect-square bg-zinc-950 border border-zinc-800 hover:border-blue-600 cursor-pointer transition-all" />
+                    {['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#333333'].map(c => (
+                       <div 
+                        key={c} 
+                        onClick={() => setLighting(c)}
+                        className={`aspect-square border-2 cursor-pointer transition-all ${lighting === c ? 'border-white scale-110 z-10' : 'border-zinc-800 hover:border-blue-600'}`} 
+                        style={{ background: c }}
+                       />
+                    ))}
+                 </div>
+                 <h4 className="text-[10px] font-black text-zinc-500 tracking-[4px] uppercase border-b border-zinc-800 pb-4 mt-4">MAT_COLORS</h4>
+                 <div className="grid grid-cols-4 gap-2">
+                    {['#111111', '#222222', '#330000', '#000033', '#003300', '#333300', '#330033', '#003333'].map(c => (
+                       <div 
+                        key={c} 
+                        onClick={() => setMatColor(c)}
+                        className={`aspect-square border-2 cursor-pointer transition-all ${matColor === c ? 'border-white scale-110 z-10' : 'border-zinc-800 hover:border-blue-600'}`} 
+                        style={{ background: c }}
+                       />
                     ))}
                  </div>
               </div>
@@ -248,27 +314,53 @@ const ArenaCreator = ({ onCancel }: any) => (
            <div className="p-8 bg-zinc-950 border border-zinc-900">
               <h3 className="text-xl font-black italic text-white uppercase tracking-tighter mb-8 border-b border-zinc-900 pb-4">TEMPLATE_LIBRARY</h3>
               <div className="space-y-4">
-                 {['STADIUM_ALPHA', 'WAREHOUSE_BETA', 'FESTIVAL_GAMMA', 'UNDERGROUND_DELTA'].map(t => (
-                    <button key={t} className="w-full p-4 bg-zinc-900 border border-zinc-800 hover:border-blue-600 text-left transition-all group">
-                       <span className="text-[10px] font-black text-zinc-600 group-hover:text-blue-600 transition-colors uppercase tracking-[4px]">{t}</span>
+                 {[
+                   { id: 'stadium', label: 'STADIUM_ALPHA' },
+                   { id: 'gym', label: 'WAREHOUSE_BETA' },
+                   { id: 'backstage', label: 'FESTIVAL_GAMMA' },
+                   { id: 'backyard', label: 'UNDERGROUND_DELTA' }
+                 ].map(t => (
+                    <button 
+                      key={t.id} 
+                      onClick={() => setType(t.id as any)}
+                      className={`w-full p-4 border text-left transition-all group ${type === t.id ? 'border-blue-600 bg-blue-600/10' : 'bg-zinc-900 border-zinc-800 hover:border-blue-600'}`}
+                    >
+                       <span className={`text-[10px] font-black uppercase tracking-[4px] ${type === t.id ? 'text-blue-500' : 'text-zinc-600 group-hover:text-blue-600'}`}>{t.label}</span>
                     </button>
                  ))}
               </div>
            </div>
            
-           <button className="w-full py-6 bg-blue-600 text-white font-black uppercase text-[10px] tracking-[8px] hover:bg-white hover:text-blue-600 transition-all shadow-2xl">
+           <button 
+            onClick={handleFinalize}
+            className="w-full py-6 bg-blue-600 text-white font-black uppercase text-[10px] tracking-[8px] hover:bg-white hover:text-blue-600 transition-all shadow-2xl active:scale-95"
+           >
               FINALIZE_GEOMETRY
            </button>
         </div>
      </div>
   </motion.div>
-);
+)};
 
-const ChampionshipCreator = ({ onCancel }: any) => (
+const ChampionshipCreator = ({ onCancel, onSave }: any) => {
+  const [name, setName] = useState('SOVEREIGN_UNIFIED_BELT');
+  const [color, setColor] = useState('#22c55e');
+  const [plate, setPlate] = useState(1);
+
+  const handleMint = () => {
+    onSave({
+      id: 'title_' + Date.now(),
+      name,
+      color,
+      plate
+    });
+  };
+
+  return (
   <motion.div 
     initial={{ opacity: 0, scale: 0.95 }}
     animate={{ opacity: 1, scale: 1 }}
-    className="flex-1 flex flex-col p-12 lg:p-20 items-center justify-center"
+    className="flex-1 flex flex-col p-12 lg:p-20 items-center justify-center overflow-y-auto"
   >
      <div className="max-w-4xl w-full">
         <header className="flex justify-between items-end mb-16 border-b border-zinc-900 pb-8">
@@ -282,41 +374,58 @@ const ChampionshipCreator = ({ onCancel }: any) => (
            <button onClick={onCancel} className="px-12 py-4 bg-zinc-900 text-zinc-500 hover:text-white font-black uppercase text-[10px] tracking-[4px] border border-zinc-800">DISCARD_DESIGN</button>
         </header>
 
-        <div className="flex gap-12">
-            <div className="flex-1 bg-zinc-950 border border-zinc-900 aspect-[4/3] flex items-center justify-center p-12 relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-12">
+            <div className="flex-1 bg-zinc-950 border border-zinc-900 aspect-[4/3] flex flex-col items-center justify-center p-12 relative overflow-hidden">
                <div className="absolute inset-0 bg-green-600/5 animate-pulse" />
                <div className="relative z-10 text-center">
                   <Trophy size={160} className="text-zinc-900 fill-zinc-900 opacity-20" />
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                    <Crown size={120} className="text-green-600 drop-shadow-[0_0_40px_rgba(34,197,94,0.4)]" />
+                    <Crown size={120} style={{ color }} className="drop-shadow-[0_0_40px_rgba(34,197,94,0.4)]" />
                   </div>
-                  <h3 className="text-3xl font-black italic text-zinc-300 uppercase tracking-tighter mt-8">SOVEREIGN_UNIFIED_BELT</h3>
+                  <input 
+                    type="text" 
+                    value={name}
+                    onChange={(e) => setName(e.target.value.toUpperCase())}
+                    className="w-full bg-transparent text-center border-b border-zinc-900 text-3xl font-black italic text-zinc-300 uppercase tracking-tighter mt-8 outline-none focus:border-green-600"
+                  />
                </div>
             </div>
 
-            <div className="w-[340px] space-y-8">
+            <div className="w-full lg:w-[340px] space-y-8">
                <Section title="PLATE_DESIGN">
                   <div className="grid grid-cols-3 gap-2">
                      {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className="aspect-square bg-zinc-900 border border-zinc-800 hover:border-green-600 cursor-pointer" />
+                        <div 
+                          key={i} 
+                          onClick={() => setPlate(i)}
+                          className={`aspect-square border cursor-pointer transition-all ${plate === i ? 'border-green-600 bg-green-600/10' : 'bg-zinc-900 border-zinc-800'}`} 
+                        />
                      ))}
                   </div>
                </Section>
                <Section title="STRAP_MATERIAL">
                   <div className="flex gap-2">
-                     {['#000', '#222', '#113', '#311'].map(c => (
-                        <div key={c} className="w-8 h-8 rounded-full border border-zinc-800" style={{ background: c }} />
+                     {['#000', '#222', '#113', '#311', '#22c55e', '#ef4444', '#3b82f6'].map(c => (
+                        <div 
+                          key={c} 
+                          onClick={() => setColor(c)}
+                          className={`w-8 h-8 rounded-full border cursor-pointer transition-all ${color === c ? 'scale-125 border-white ring-2 ring-green-600' : 'border-zinc-800 hover:border-zinc-500'}`} 
+                          style={{ background: c }} 
+                        />
                      ))}
                   </div>
                </Section>
-               <button className="w-full py-6 bg-green-600 text-white font-black uppercase text-[10px] tracking-[8px] hover:bg-white hover:text-green-600 transition-all shadow-2xl">
+               <button 
+                onClick={handleMint}
+                className="w-full py-6 bg-green-600 text-white font-black uppercase text-[10px] tracking-[8px] hover:bg-white hover:text-green-600 transition-all shadow-2xl active:scale-95"
+               >
                   MINT_CHAMPIONSHIP
                </button>
             </div>
         </div>
      </div>
   </motion.div>
-);
+)};
 
 const ShowCreator = ({ onCancel }: any) => (
   <motion.div 

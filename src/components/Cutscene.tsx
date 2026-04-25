@@ -7,9 +7,10 @@ interface CutsceneProps {
   char1: CharacterData;
   char2: CharacterData;
   onComplete: () => void;
+  isPaused: boolean;
 }
 
-export const Cutscene: React.FC<CutsceneProps> = ({ type, char1, char2, onComplete }) => {
+export const Cutscene: React.FC<CutsceneProps> = ({ type, char1, char2, onComplete, isPaused }) => {
   const [phase, setPhase] = useState(0);
   
   const scenarios = {
@@ -41,9 +42,14 @@ export const Cutscene: React.FC<CutsceneProps> = ({ type, char1, char2, onComple
   const currentScenario = scenarios[type] || scenarios.promo;
 
   useEffect(() => {
-    const skip = () => onComplete();
+    if (isPaused) return;
+
+    const skip = (e: any) => {
+        if (e.key === 'p' || e.key === 'Escape') return;
+        onComplete();
+    };
     window.addEventListener('keydown', skip);
-    window.addEventListener('mousedown', skip);
+    window.addEventListener('pointerdown', skip);
 
     const timer = setTimeout(() => {
       if (phase < currentScenario.length - 1) {
@@ -55,10 +61,10 @@ export const Cutscene: React.FC<CutsceneProps> = ({ type, char1, char2, onComple
 
     return () => {
       window.removeEventListener('keydown', skip);
-      window.removeEventListener('mousedown', skip);
+      window.removeEventListener('pointerdown', skip);
       clearTimeout(timer);
     };
-  }, [phase, type, onComplete]);
+  }, [phase, type, onComplete, isPaused]);
 
   return (
     <div className="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center p-12 overflow-hidden">

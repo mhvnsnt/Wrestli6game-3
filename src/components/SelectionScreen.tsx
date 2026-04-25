@@ -72,7 +72,10 @@ export const SelectionScreen: React.FC<SelectionScreenProps> = ({ onConfirm, onB
       if (key === '2') setP2CPU(v => !v);
       if (key === 'q') setFocus('p1');
       if (key === 'r') setFocus('p2');
-      if (key === 'enter' || key === 'f') onConfirm(p1, p1CPU, p2, p2CPU, selectedTitle === 'none' ? undefined : selectedTitle);
+      if (key === 'enter' || key === 'f' || key === ' ') {
+        e.preventDefault();
+        onConfirm(p1, p1CPU, p2, p2CPU, selectedTitle === 'none' ? undefined : selectedTitle);
+      }
       if (key === 'escape' || key === 'b') onBack();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -179,7 +182,7 @@ export const SelectionScreen: React.FC<SelectionScreenProps> = ({ onConfirm, onB
               SUPERSTAR <span className="text-zinc-600">SELECTION</span>
             </div>
         </div>
-        <button onClick={() => onConfirm(p1, p1CPU, p2, p2CPU, selectedTitle)} className="px-8 lg:px-12 py-3 lg:py-4 bg-white text-black font-black uppercase text-[9px] lg:text-[10px] tracking-[6px] lg:tracking-[8px] -skew-x-12 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] flex-none">
+        <button onClick={() => onConfirm(p1, p1CPU, p2, p2CPU, selectedTitle === 'none' ? undefined : selectedTitle)} className="px-8 lg:px-12 py-3 lg:py-4 bg-white text-black font-black uppercase text-[9px] lg:text-[10px] tracking-[6px] lg:tracking-[8px] -skew-x-12 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] flex-none">
           <span className="inline-block skew-x-12">START MATCH</span>
         </button>
       </div>

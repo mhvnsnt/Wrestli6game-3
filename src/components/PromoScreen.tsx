@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 
 interface PromoScreenProps {
@@ -6,9 +6,25 @@ interface PromoScreenProps {
   char2?: { name: string; sigil: string };
   text: string;
   onComplete: () => void;
+  isPaused: boolean;
 }
 
-export const PromoScreen: React.FC<PromoScreenProps> = ({ char1, char2, text, onComplete }) => {
+export const PromoScreen: React.FC<PromoScreenProps> = ({ char1, char2, text, onComplete, isPaused }) => {
+  useEffect(() => {
+    if (isPaused) return;
+    const skip = (e: any) => {
+        // Only skip if not a menu key
+        if (e.key === 'p' || e.key === 'Escape') return;
+        onComplete();
+    };
+    window.addEventListener('keydown', skip);
+    window.addEventListener('pointerdown', skip);
+    return () => {
+      window.removeEventListener('keydown', skip);
+      window.removeEventListener('pointerdown', skip);
+    };
+  }, [onComplete, isPaused]);
+
   return (
     <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-[1500] p-12">
       <div className="flex w-full max-w-6xl justify-between items-end mb-12">

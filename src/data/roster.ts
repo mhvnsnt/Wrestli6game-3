@@ -37,6 +37,7 @@ export const ROSTER: CharacterData[] = [
         topColor: '#111', bottomColor: '#003366', extraColor: '#ffffff',
         height: 80, muscleMass: 1.2, fatMass: 0.1, feminineCurve: 0, breastSize: 0, gluteSize: 0.35, hairLength: 4,
         gender: 'male', sigil: '#003366', weaponType: 'none', archetype: 'grappler', abilities: ['power_strike', 'armor'], manager: 'none', attireSlot: 0, charisma: 140,
+        scars: ['eye_slash'],
         alternateAttires: [
             { clothing: { top: 'bare', bottom: 'pants', extra: 'none', boots: 'regular' }, topColor: '#111', bottomColor: '#003366', extraColor: '#ffffff' }, // Classic Blue
             { clothing: { top: 'bare', bottom: 'pants', extra: 'none', boots: 'regular' }, topColor: '#111', bottomColor: '#330000', extraColor: '#ffffff' }, // Classic Red
@@ -85,6 +86,7 @@ export const ROSTER: CharacterData[] = [
         topColor: '#111', bottomColor: '#111', extraColor: '#111',
         height: 86, muscleMass: 1.1, fatMass: 0.35, feminineCurve: 0, breastSize: 0, gluteSize: 0.45, hairLength: 1,
         gender: 'male', sigil: '#ff8800', weaponType: 'none', archetype: 'hybrid', abilities: ['power_strike', 'armor'], manager: 'none', attireSlot: 0, charisma: 145,
+        tattoos: ['arm_sleeve'],
         alternateAttires: [
             { clothing: { top: 'bare', bottom: 'shorts', extra: 'none', boots: 'regular', kneePadL: 'black', kneePadR: 'black' }, topColor: '#111', bottomColor: '#111', extraColor: '#ffcc00' }, // Black/Yellow
             { clothing: { top: 'bare', bottom: 'trunks', extra: 'none', boots: 'regular', kneePadL: 'white', kneePadR: 'white' }, topColor: '#111', bottomColor: '#ffffff', extraColor: '#003366' }, // White/Blue Classic
@@ -97,6 +99,83 @@ export const ROSTER: CharacterData[] = [
                 { name: 'MUSCLE BUSTER', dmg: 85, kx: 2, ky: -45, time: 100, category: 'standing', animation: 'ultra' }
             ]
         }
+    },
+    {
+        name: "THE DARK PIONEER",
+        bio: "An indie legend who redefined technical wrestling. Her strikes are surgical, her spirit unbreakable.",
+        record: { wins: 142, losses: 40 },
+        hometown: "Cleveland, OH",
+        bodyType: 'feminine_athletic', faceShape: 'sharp', skinColor: '#fde0be', hairColor: '#2a1a0a', eyeColor: '#3a7acc',
+        hairStyle: 'undercut', clothing: { top: 'tank', bottom: 'tights', extra: 'none', boots: 'regular', wristbandL: 'black', wristbandR: 'black' },
+        topColor: '#222', bottomColor: '#222', extraColor: '#444',
+        height: 82, muscleMass: 0.8, fatMass: 0.1, feminineCurve: 0.6, breastSize: 0.4, gluteSize: 0.55, hairLength: 5,
+        gender: 'female', sigil: '#ff0055', weaponType: 'none', archetype: 'technician', abilities: ['speed_burst', 'resiliency'], manager: 'none', attireSlot: 0, charisma: 135,
+        moveset: { 
+            ...standardMoveset,
+            finishers: [{ name: 'PIONEER PRESS', dmg: 75, kx: 5, ky: -40, time: 90, category: 'diving', animation: 'special' }]
+        },
+        tattoos: ['arm_sleeve']
+    },
+    {
+        name: "TITAN OF THE TUNDRA",
+        bio: "A powerhouse from the frozen north. She doesn't just win matches; she conquers spirits.",
+        record: { wins: 95, losses: 5 },
+        hometown: "Novosibirsk, Russia",
+        bodyType: 'amazon', faceShape: 'angular', skinColor: '#fde0be', hairColor: '#ffffff', eyeColor: '#4488ff',
+        hairStyle: 'braid', clothing: { top: 'armor', bottom: 'armored', extra: 'none', boots: 'regular' },
+        topColor: '#445566', bottomColor: '#334455', extraColor: '#ccddee',
+        height: 105, muscleMass: 1.5, fatMass: 0.2, feminineCurve: 0.3, breastSize: 0.4, gluteSize: 0.5, hairLength: 10,
+        gender: 'female', sigil: '#00ffff', archetype: 'powerhouse', abilities: ['armor', 'shock_strike'], manager: 'none', attireSlot: 0, charisma: 150,
+        moveset: { 
+            ...standardMoveset,
+            finishers: [{ name: 'TUNDRA SLAM', dmg: 90, kx: 0, ky: -55, time: 110, category: 'standing', animation: 'ultra' }]
+        }
+    },
+    {
+        name: "AZTEC EAGLE",
+        bio: "The high-flying sensation of the highlands. Gravity is merely a suggestion to him.",
+        record: { wins: 110, losses: 45 },
+        hometown: "Mexico City",
+        bodyType: 'slim', faceShape: 'oval', skinColor: '#c8845a', hairColor: '#111', eyeColor: '#2a9a55',
+        hairStyle: 'none', clothing: { top: 'bare', bottom: 'tights', extra: 'none', mask: 'warrior', boots: 'regular' },
+        topColor: '#0a4d26', bottomColor: '#0a4d26', extraColor: '#ffd700',
+        height: 78, muscleMass: 0.6, fatMass: 0.05, feminineCurve: 0, breastSize: 0, gluteSize: 0.3, hairLength: 0,
+        gender: 'male', sigil: '#0a4d26', weaponType: 'none', archetype: 'high_flyer', abilities: ['speed_boost', 'teleport'], manager: 'none', attireSlot: 0, charisma: 160,
+        moveset: { 
+            ...standardMoveset,
+            finishers: [{ name: 'EAGLE DIVE', dmg: 80, kx: 10, ky: -30, time: 80, category: 'diving', animation: 'ultra' }]
+        }
+    },
+    {
+        name: "KIMURA THE CAGE MASTER",
+        bio: "An apex predator in the octagon who brought her lethal joint locks to the squared circle. Perfection in pain.",
+        record: { wins: 62, losses: 8 },
+        hometown: "Tokyo, Japan",
+        bodyType: 'feminine_athletic', faceShape: 'sharp', skinColor: '#fdebce', hairColor: '#111', eyeColor: '#3c1f10',
+        hairStyle: 'undercut', clothing: { top: 'tank', bottom: 'shorts', extra: 'hand_wraps', boots: 'regular' },
+        topColor: '#551100', bottomColor: '#222222', extraColor: '#bbbbbb',
+        height: 84, muscleMass: 0.9, fatMass: 0.08, feminineCurve: 0.5, breastSize: 0.25, gluteSize: 0.5, hairLength: 3,
+        gender: 'female', sigil: '#ff3300', archetype: 'technician', abilities: ['lifesteal', 'speed_burst'], manager: 'none', attireSlot: 0, charisma: 142,
+        moveset: { 
+            ...standardMoveset,
+            finishers: [{ name: 'KIMURA LOCK', dmg: 75, kx: 0, ky: -2, time: 300, category: 'ground', animation: 'ultra', isHold: true }]
+        }
+    },
+    {
+        name: "RENEGADE RYDER",
+        bio: "The punk rock powerhouse. She fights for the outcasts and strikes with the force of a tectonic shift.",
+        record: { wins: 78, losses: 23 },
+        hometown: "London, UK",
+        bodyType: 'athletic', faceShape: 'angular', skinColor: '#fde0be', hairColor: '#ff2244', eyeColor: '#111',
+        hairStyle: 'mohawk', clothing: { top: 'jacket', bottom: 'pants', extra: 'none', boots: 'regular' },
+        topColor: '#111', bottomColor: '#000', extraColor: '#ff2244',
+        height: 88, muscleMass: 1.1, fatMass: 0.15, feminineCurve: 0.4, breastSize: 0.35, gluteSize: 0.45, hairLength: 6,
+        gender: 'female', sigil: '#ff2244', archetype: 'brawler', abilities: ['rage', 'power_strike'], manager: 'none', attireSlot: 0, charisma: 138,
+        moveset: { 
+            ...standardMoveset,
+            finishers: [{ name: 'RYDER KICK', dmg: 80, kx: 12, ky: -15, time: 60, category: 'standing', animation: 'ultra' }]
+        },
+        tattoos: ['arm_sleeve', 'chest_piece']
     },
     {
         name: 'THE CROWN SOVEREIGN',

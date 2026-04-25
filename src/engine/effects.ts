@@ -317,8 +317,50 @@ export class Shockwave {
   }
 }
 
-export class ImpactSlowMo {
-  life: number;
-  constructor(life = 60) { this.life = life; }
-  update() { this.life--; return this.life > 0; }
+export class BloodDecal {
+    x: number;
+    y: number;
+    size: number;
+    rotation: number;
+    opacity: number;
+    life: number;
+    maxLife: number;
+
+    constructor(x: number, y: number, size: number) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.opacity = 0.5 + Math.random() * 0.3;
+        this.life = 2000; // Last for ~30 seconds at 60fps
+        this.maxLife = 2000;
+    }
+
+    update() {
+        this.life--;
+        return this.life > 0;
+    }
+
+    drawManual(ctx: CanvasRenderingContext2D) {
+        const a = (this.life / this.maxLife) * this.opacity;
+        ctx.save();
+        ctx.translate(0, 0); // Position is handled by GameCanvas projection
+        ctx.rotate(this.rotation);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#600'; // Dried blood look
+        ctx.beginPath();
+        // Randomized splatter
+        ctx.ellipse(0, 0, this.size, this.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add some small spatters around
+        for(let i=0; i<3; i++) {
+            const dist = this.size * (1 + Math.random());
+            const ang = Math.random() * Math.PI * 2;
+            ctx.beginPath();
+            ctx.arc(Math.cos(ang) * dist, Math.sin(ang) * dist, this.size * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
 }

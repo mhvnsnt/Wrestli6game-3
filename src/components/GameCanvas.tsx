@@ -9,7 +9,12 @@ import { CharacterData, WeaponObject, Weapons, GameOptions, ArenaData } from '..
 import { Fighter } from '../engine/fighter';
 import { Fighter3DRenderer } from '../engine/fighter3d';
 import { EnergyBolt, Particle, HitFlash, Sigil } from '../engine/effects';
-import { RingRope, ArenaObjectPhysics } from '../engine/physics';
+import { RingRope, ArenaObjectPhysics, ScenePhysics } from '../engine/physics';
+import { Referee } from '../engine/referee';
+import { Referee3DRenderer } from '../engine/referee3d';
+import { MatchRating } from './MatchRating';
+
+const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
 
 interface GameCanvasProps {
   p1Data: CharacterData;
@@ -22,6 +27,7 @@ interface GameCanvasProps {
   matchCategory?: string;
   matchType?: string;
   matchPhase: 'intro' | 'entrance' | 'fight' | 'victory' | 'report';
+  isPaused?: boolean;
   onUpdate: (p1: any, p2: any) => void;
   onPhaseChange?: (phase: 'intro' | 'entrance' | 'fight' | 'victory' | 'report') => void;
   onGameOver: (winnerName: string | null) => void;
@@ -109,6 +115,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     matchCategory, 
     matchType, 
     matchPhase,
+    isPaused = false,
     onUpdate, 
     onPhaseChange,
     onGameOver 
@@ -118,6 +125,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const p2Ref = useRef<Fighter | null>(null);
   const p1VisualRef = useRef<Fighter3DRenderer | null>(null);
   const p2VisualRef = useRef<Fighter3DRenderer | null>(null);
+  const refRef = useRef<Referee | null>(null);
+  const refVisualRef = useRef<Referee3DRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -129,18 +138,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const weaponsRef = useRef<WeaponObject[]>([]);
   const weaponVisualsRef = useRef<Map<WeaponObject, THREE.Group>>(new Map());
   const ropesRef = useRef<RingRope[]>([]);
+  const matchScoreRef = useRef(0);
+  const matchEventRef = useRef<string | null>(null);
+  const eventTimerRef = useRef(0);
+  const phaseRef = useRef(matchPhase);
+  useEffect(() => { phaseRef.current = matchPhase; }, [matchPhase]);
+
   const ringGroupRef = useRef<THREE.Group | null>(null);
   const keysRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      keysRef.current[key] = true;
-
+      
+      const currentPhase = phaseRef.current;
       // Skip current cinematic phase on any key
-      if ((matchPhase === 'entrance' || matchPhase === 'victory' || matchPhase === 'report') && !['escape', 'tab'].includes(key)) {
-        if (matchPhase === 'entrance') onPhaseChange?.('fight');
-        else if (matchPhase === 'victory') onPhaseChange?.('report');
+      if ((currentPhase === 'entrance' || currentPhase === 'victory' || currentPhase === 'report') && !['escape', 'tab'].includes(key)) {
+        if (currentPhase === 'entrance') onPhaseChange?.('fight');
+        else if (currentPhase === 'victory') onPhaseChange?.('report');
+        return;
+      }
+
+      if (currentPhase === 'fight') {
+        keysRef.current[key] = true;
       }
 
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' '].includes(key)) {
@@ -150,16 +170,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const handleKeyUp = (e: KeyboardEvent) => {
       keysRef.current[e.key.toLowerCase()] = false;
     };
+
+    const handleMouseDown = () => {
+      const currentPhase = phaseRef.current;
+      if (currentPhase === 'entrance') onPhaseChange?.('fight');
+      else if (currentPhase === 'victory') onPhaseChange?.('report');
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousedown', () => {
-        if (matchPhase === 'entrance') onPhaseChange?.('fight');
-        else if (matchPhase === 'victory') onPhaseChange?.('report');
-    });
+    window.addEventListener('mousedown', handleMouseDown);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousedown', handleMouseDown);
+      
+      // Stop themes on exit
+      import('../engine/audio').then(m => m.sounds.toggleTheme(false));
     };
   }, [matchPhase, onPhaseChange]);
 
@@ -168,17 +196,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!container) return;
 
     // 3D SETUP
-    const W = container.clientWidth;
-    const H = container.clientHeight;
+    const W = container.clientWidth || window.innerWidth || 800;
+    const H = container.clientHeight || window.innerHeight || 600;
     
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#050510');
+    scene.background = new THREE.Color('#020205');
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
     camera.position.set(0, 3, 8);
     camera.lookAt(0, 1, 0);
     cameraRef.current = camera;
+
+    // STADIUM ATMOSPHERE
+    scene.fog = new THREE.FogExp2('#050510', 0.015);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(W, H);
@@ -222,6 +253,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ringGroupRef.current = ringGroup;
 
     if (arena?.type === 'stadium' || !arena) {
+        // Stadium Floor (Around the ring)
+        const stadiumFloorGeo = new THREE.PlaneGeometry(80, 80);
+        const stadiumFloorMat = new THREE.MeshStandardMaterial({ 
+            color: '#050508', 
+            roughness: 0.15, 
+            metalness: 0.9 
+        });
+        const stadiumFloor = new THREE.Mesh(stadiumFloorGeo, stadiumFloorMat);
+        stadiumFloor.rotation.x = -Math.PI / 2;
+        stadiumFloor.position.y = -0.76;
+        stadiumFloor.receiveShadow = true;
+        scene.add(stadiumFloor);
+
         // RING STRUCTURE (The Box under the Ring)
         const ringBaseGeo = new THREE.BoxGeometry(10.5, 0.8, 10.5);
         const ringBase = new THREE.Mesh(ringBaseGeo, ringBaseMat);
@@ -256,15 +300,127 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ring.receiveShadow = true;
         ringGroup.add(ring);
 
-        // Barricades (Ringside) - Outside ringGroup usually as they don't shake with mat
-        const barGeo = new THREE.BoxGeometry(0.2, 1, 15);
-        const leftBar = new THREE.Mesh(barGeo, barMat);
-        leftBar.position.set(-10, -0.2, 0); 
-        scene.add(leftBar);
+        // PRO STAGE LIGHTING
+        const ambiLight = new THREE.AmbientLight(0xffffff, 0.05);
+        scene.add(ambiLight);
+
+        const createSpotlight = (x: number, y: number, z: number, target: THREE.Object3D) => {
+            const spotHeight = 15;
+            const spot = new THREE.SpotLight(0xffffff, 180, 50, 0.35, 0.5, 2);
+            spot.position.set(x, spotHeight, z);
+            spot.target = target;
+            spot.castShadow = true;
+            spot.shadow.mapSize.width = 1024;
+            scene.add(spot);
+            
+            // Static Light Cone (Visualizer)
+            const coneGeo = new THREE.CylinderGeometry(0.1, 3, spotHeight, 32, 1, true);
+            const coneMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff, 
+                transparent: true, 
+                opacity: 0.1, 
+                blending: THREE.AdditiveBlending,
+                side: THREE.BackSide 
+            });
+            const cone = new THREE.Mesh(coneGeo, coneMat);
+            cone.position.set(x, spotHeight/2, z);
+            scene.add(cone);
+        };
+
+        // ENTRANCE STAGE (TitanTron)
+        const stageGroup = new THREE.Group();
         
-        const rightBar = new THREE.Mesh(barGeo, barMat);
-        rightBar.position.set(10, -0.2, 0);
-        scene.add(rightBar);
+        // Spotlights pointed at ring and entrance
+        createSpotlight(-8, 12, 8, ringGroup);
+        createSpotlight(8, 12, 8, ringGroup);
+        createSpotlight(0, 12, -15, stageGroup); // Entrance Spotlight
+        const screenGeo = new THREE.PlaneGeometry(16, 8);
+        const screenMat = new THREE.MeshStandardMaterial({ 
+            color: '#000', 
+            emissive: '#050515', 
+            metalness: 0.9, 
+            roughness: 0.1 
+        });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.set(0, 5, -20);
+        stageGroup.add(screen);
+
+        const stageFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), new THREE.MeshStandardMaterial({ color: '#111', metalness: 0.8, roughness: 0.2 }));
+        stageFloor.rotation.x = -Math.PI / 2;
+        stageFloor.position.set(0, -0.75, -16);
+        stageGroup.add(stageFloor);
+        scene.add(stageGroup);
+
+        // Truss Structure
+        const trussMat = new THREE.MeshStandardMaterial({ color: '#333', metalness: 0.9, roughness: 0.1 });
+        const createTruss = (x: number, z: number, rot: number) => {
+            const truss = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 30, 8), trussMat);
+            truss.position.set(x, 12, z);
+            truss.rotation.z = Math.PI / 2;
+            truss.rotation.y = rot;
+            scene.add(truss);
+        };
+        createTruss(0, 10, 0);
+        createTruss(0, -10, 0);
+
+        // Barricades (Ringside) - Professional Metal Guardrails
+        const railMat = new THREE.MeshStandardMaterial({ color: '#444', metalness: 1.0, roughness: 0.1 });
+        const createBarricade = (w: number, h: number, x: number, z: number, ry: number) => {
+            const group = new THREE.Group();
+            const topRail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, w), railMat);
+            topRail.rotation.z = Math.PI / 2;
+            topRail.position.y = h;
+            group.add(topRail);
+            
+            // Vertical Bars
+            for(let i=0; i<w*2; i++) {
+                const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, h), railMat);
+                bar.position.set(-w/2 + i * 0.5, h/2, 0);
+                group.add(bar);
+            }
+            group.position.set(x, 0, z);
+            group.rotation.y = ry;
+            scene.add(group);
+        };
+        
+        createBarricade(20, 1.2, -12, 0, Math.PI / 2);
+        createBarricade(20, 1.2, 12, 0, -Math.PI / 2);
+        createBarricade(20, 1.2, 0, 12, 0);
+        createBarricade(20, 1.2, 0, -12, Math.PI);
+
+        // Announce Table
+        const tableGroup = new THREE.Group();
+        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 1.5), new THREE.MeshStandardMaterial({ color: '#222' }));
+        tableTop.position.y = 0.8;
+        tableTop.name = 'table_top';
+        tableGroup.add(tableTop);
+        
+        const tableBase = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.8, 1.3), new THREE.MeshStandardMaterial({ color: '#111' }));
+        tableBase.position.y = 0.4;
+        tableGroup.add(tableBase);
+
+        // Add to weapons ref as special static type for collision detection
+        const announceTable: WeaponObject = {
+            id: 'announce_table_1',
+            type: 'table',
+            x: 1350, y: 380, z: 0,
+            vx: 0, vy: 0, rotation: 0, rv: 0, onGround: true,
+            durability: 10, maxDurability: 10
+        };
+        weaponsRef.current.push(announceTable);
+        weaponVisualsRef.current.set(announceTable, tableGroup);
+
+        // Monitors on Table
+        for(let i=0; i<2; i++) {
+            const mon = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.1), new THREE.MeshStandardMaterial({ color: '#000', emissive: '#050510' }));
+            mon.position.set(-0.8 + i * 1.6, 1.0, 0);
+            mon.rotation.x = -0.3;
+            tableGroup.add(mon);
+        }
+        
+        tableGroup.position.set(13.5, -0.8, 0);
+        tableGroup.rotation.y = -Math.PI / 2;
+        scene.add(tableGroup);
     } else if (arena?.type === 'backstage') {
         // Backstage Floor (Concrete)
         const concGeo = new THREE.PlaneGeometry(50, 50);
@@ -299,6 +455,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         door.position.set(0, 5, -9.9);
         scene.add(door);
     }
+
+    // Procedural Crowd Signs
+    const createSign = (x: number, z: number, text: string, color: string) => {
+        const signCanvas = document.createElement('canvas');
+        signCanvas.width = 128; signCanvas.height = 64;
+        const sctx = signCanvas.getContext('2d');
+        if (sctx) {
+            sctx.fillStyle = color; sctx.fillRect(0,0,128,64);
+            sctx.fillStyle = '#000'; sctx.font = 'bold 20px "Share Tech Mono"';
+            sctx.textAlign = 'center'; sctx.fillText(text, 64, 40);
+        }
+        const signTex = new THREE.CanvasTexture(signCanvas);
+        const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), signMat);
+        sign.position.set(x, 1, z);
+        sign.lookAt(0, 2, 0);
+        scene.add(sign);
+    };
+    
+    ['AUDIT_THIS', 'SOVEREIGN', 'CORE_WIN', 'LP3_GANG'].forEach((t, i) => {
+        createSign(-10.1, -6 + i * 4, t, i % 2 === 0 ? '#fff' : '#f00');
+        createSign(10.1, -6 + i * 4, t, i % 2 === 0 ? '#fff' : '#f00');
+    });
 
     // Front Barricade (Near Camera generally)
     const frontBarGeo = new THREE.BoxGeometry(20, 1, 0.2);
@@ -397,9 +576,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Turnbuckles and Ropes
     if (arena?.type === 'stadium' || !arena) {
-        const tbGeo = new THREE.CylinderGeometry(0.1, 0.12, 1.6, 12);
+        const tbPostGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.8, 16);
+        const padGeo = new THREE.BoxGeometry(0.35, 0.35, 0.2);
+        const cornMat = new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.2, metalness: 0.8 });
+        const padMat = new THREE.MeshStandardMaterial({ color: arena?.apronColor || '#ff0000', roughness: 0.6 });
+
         const corners = [[-5.2, 5.2], [5.2, 5.2], [5.2, -5.2], [-5.2, -5.2]];
-        
+        corners.forEach((c, i) => {
+            const post = new THREE.Mesh(tbPostGeo, cornMat);
+            post.position.set(c[0], 0.9, c[1]);
+            ringGroup.add(post);
+
+            // Turnbuckle Pads (Three per corner)
+            for (let j = 0; j < 3; j++) {
+                const pad = new THREE.Mesh(padGeo, padMat);
+                pad.position.set(c[0] * 0.95, 0.5 + j * 0.5, c[1] * 0.95);
+                pad.lookAt(0, pad.position.y, 0);
+                ringGroup.add(pad);
+            }
+        });
+
+        // ROPES (Physical high-res cylinders)
+        const ropeMat = new THREE.MeshStandardMaterial({ 
+            color: arena?.ropeColor || '#ffffff', 
+            roughness: 0.4,
+            metalness: 0.1 
+        });
         // Background Crowd
         const crowdGeo = new THREE.PlaneGeometry(80, 20);
         const crowdMat = new THREE.MeshStandardMaterial({ 
@@ -413,16 +615,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         scene.add(crowd);
 
         corners.forEach((pos, idx) => {
-          const tb = new THREE.Mesh(tbGeo, tbMat);
-          tb.position.set(pos[0], 0.8, pos[1]);
-          tb.castShadow = true;
-          ringGroup.add(tb);
-
           const nextPos = corners[(idx + 1) % 4];
           const isVerticalSide = pos[0] === nextPos[0];
           const sideLen = isVerticalSide ? Math.abs(nextPos[1] - pos[1]) : Math.abs(nextPos[0] - pos[0]);
 
-          [0.4, 0.8, 1.2].forEach(y => {
+          [0.5, 1.0, 1.5].forEach(y => {
             // Each rope segment is a RingRope in the physics engine
             const ropePhys = new RingRope(isVerticalSide ? pos[0] : pos[1], 0, sideLen, 12, true);
             ropesRef.current.push(ropePhys);
@@ -438,8 +635,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
             const segCount = 11;
             for(let s=0; s<segCount; s++) {
-                const segGeo = new THREE.CylinderGeometry(0.018, 0.018, sideLen / segCount + 0.02, 6);
-                const segMat = new THREE.MeshStandardMaterial({ color: arena?.lighting || '#f22', emissive: '#400', roughness: 0.5 });
+                const segGeo = new THREE.CylinderGeometry(0.04, 0.04, sideLen / segCount + 0.02, 12);
+                const segMat = new THREE.MeshStandardMaterial({ 
+                    color: arena?.ropeColor || '#ffffff', 
+                    roughness: 0.4,
+                    metalness: 0.1 
+                });
                 const seg = new THREE.Mesh(segGeo, segMat);
                 ropeMeshGroup.add(seg);
             }
@@ -480,15 +681,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     p1VisualRef.current = new Fighter3DRenderer(p1Ref.current, scene);
     p2VisualRef.current = new Fighter3DRenderer(p2Ref.current, scene);
 
+    const referee = new Referee(450, 300, 200);
+    refRef.current = referee;
+    refVisualRef.current = new Referee3DRenderer(referee, scene);
+
     let rafId: number;
     let gameOverHandled = false;
     let hitStopFrames = 0;
 
     const loop = () => {
-      if (!p1Ref.current || !p2Ref.current || !p1VisualRef.current || !p2VisualRef.current) return;
+      if (!p1Ref.current || !p2Ref.current || !p1VisualRef.current || !p2VisualRef.current || !cameraRef.current) return;
+
+      if (isPaused) {
+        rendererRef.current?.render(scene, cameraRef.current);
+        rafId = requestAnimationFrame(loop);
+        return;
+      }
 
       const p1 = p1Ref.current;
       const p2 = p2Ref.current;
+      const camera = cameraRef.current;
 
       // HitStop Logic
       if (hitStopFrames > 0) {
@@ -500,9 +712,100 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Update Physics
       if (!gameOverHandled) {
+        const oldP1Hp = p1.hp;
+        const oldP2Hp = p2.hp;
+
         const hs1 = p1.update(keysRef.current, p2, projsRef.current, sigilsRef.current, particlesRef.current, hitFlashesRef.current, weaponsRef.current, gameOptions.bloodEnabled) as any;
         const hs2 = p2.update(keysRef.current, p1, projsRef.current, sigilsRef.current, particlesRef.current, hitFlashesRef.current, weaponsRef.current, gameOptions.bloodEnabled) as any;
         
+        // PHYSICAL INTERACTIONS
+        ScenePhysics.checkFighterCollision(p1, p2);
+        ScenePhysics.checkTableBreaks(p1, weaponsRef.current, particlesRef.current);
+        ScenePhysics.checkTableBreaks(p2, weaponsRef.current, particlesRef.current);
+        // DYNAMIC CAMERA LOGIC
+        const midPoint = new THREE.Vector3((p1.cx + p2.cx)/200, (p1.cy + p2.cy)/200, (p1.z + p2.z)/200);
+        const dist = Math.abs(p1.cx - p2.cx) / 100;
+        
+        const cameraTargetPos = new THREE.Vector3();
+        const cameraTargetLookAt = new THREE.Vector3();
+        let cameraSmoothing = 0.05;
+
+        const currentPhase = phaseRef.current;
+        if (currentPhase === 'fight') {
+            // Impact Zoom / Cinematic Focus
+            const focusFighter = (p1.state === 'attack' || hitStopFrames > 0) ? p1 : p2;
+            cameraTargetPos.set(focusFighter.cx/100 + focusFighter.facing * 2.5, 2.2, focusFighter.z/100 + 4.0);
+            cameraTargetLookAt.set(focusFighter.cx/100, 1.4, focusFighter.z/100);
+            cameraSmoothing = 0.12;
+        } else if (p1.isBeingPinned || p2.isBeingPinned) {
+            // Dramatic Pin Angle
+            const pinned = p1.isBeingPinned ? p1 : p2;
+            cameraTargetPos.set(pinned.cx/100 + 3.5, 1.2, pinned.z/100 + 3.5);
+            cameraTargetLookAt.set(pinned.cx/100, 0.4, pinned.z/100);
+            cameraSmoothing = 0.08;
+        } else if (currentPhase === 'entrance') {
+             // Wide sweep for entrance
+             cameraTargetPos.set(Math.sin(Date.now()*0.0005)*5, 4, 15);
+             cameraTargetLookAt.set(0, 2, 0);
+             cameraSmoothing = 0.02;
+        } else {
+            // High-Octane Broadcast Follow
+            const zoomZ = Math.max(7.5, dist * 0.75 + 5.5);
+            cameraTargetPos.set(midPoint.x * 0.6, 4.2, midPoint.z + zoomZ);
+            cameraTargetLookAt.set(midPoint.x, 1.6, midPoint.z);
+            cameraSmoothing = 0.05;
+        }
+
+        camera.position.lerp(cameraTargetPos, cameraSmoothing);
+        // LookAt interpolation for stability
+        if (!camera.userData.lookAt) camera.userData.lookAt = new THREE.Vector3(0, 1, 0);
+        const currentLookAt = camera.userData.lookAt as THREE.Vector3;
+        currentLookAt.lerp(cameraTargetLookAt, 0.1);
+        camera.lookAt(currentLookAt);
+
+        // Match Rating / Event Detection (Storytelling Pacing)
+        if (eventTimerRef.current > 0) eventTimerRef.current--;
+        else matchEventRef.current = null;
+
+        // Variety Bonus Logic (Internal tracking would go here, simplified for now)
+        if (hs1 > 2 || hs2 > 2) {
+            matchScoreRef.current += 1.2;
+            if (hs1 > 12 || hs2 > 12) {
+                matchScoreRef.current += 8;
+                matchEventRef.current = 'HOLY SHIT!';
+                eventTimerRef.current = 80;
+                hitStopFrames = 15; // Extra impact freeze
+            }
+        }
+
+        // Near Fall Bonus
+        if ((oldP1Hp > 10 && p1.hp <= 10) || (oldP2Hp > 10 && p2.hp <= 10)) {
+            matchScoreRef.current += 15;
+            matchEventRef.current = 'NEAR FALL DRIVE!';
+            eventTimerRef.current = 100;
+        }
+
+        // Kickout at 2 logic (Hard to detect perfectly here, but we can check if a pin ended quickly)
+        if (p1.isBeingPinned || p2.isBeingPinned) {
+            matchScoreRef.current += 0.05; // Points for holding the pin
+        }
+
+        // Referee Hit Detection
+        if (refRef.current) {
+            [p1, p2].forEach(f => {
+                if (f.hitbox && refRef.current) {
+                    const hb = f.hitbox;
+                    const rx = refRef.current.x;
+                    const rz = refRef.current.z;
+                    if (Math.abs(hb.x - rx) < 60 && Math.abs(f.z - rz) < 60) {
+                        refRef.current.applyBump(hb.dmg);
+                        matchEventRef.current = 'REF BUMP!';
+                        eventTimerRef.current = 90;
+                    }
+                }
+            });
+        }
+
         if (typeof hs1 === 'number' && hs1 > 0 || typeof hs2 === 'number' && hs2 > 0) {
           hitStopFrames = Math.max(typeof hs1 === 'number' ? hs1 : 0, typeof hs2 === 'number' ? hs2 : 0);
         }
@@ -617,6 +920,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           { 
             hp: p1.hp, 
             energy: p1.energy, 
+            stamina: p1.stamina,
+            maxStamina: p1.maxStamina,
             sigMeter: p1.sigMeter, 
             finMeter: p1.finMeter, 
             sigStocks: p1.sigStocks, 
@@ -628,6 +933,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           { 
             hp: p2.hp, 
             energy: p2.energy, 
+            stamina: p2.stamina,
+            maxStamina: p2.maxStamina,
             sigMeter: p2.sigMeter, 
             finMeter: p2.finMeter, 
             sigStocks: p2.sigStocks, 
@@ -635,6 +942,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             data: p2.char.cd, 
             combo: p2.comboCount, 
             bodyDamage: p2.bodyDamage 
+          },
+          {
+            score: matchScoreRef.current,
+            event: matchEventRef.current
           }
         );
 
@@ -645,31 +956,54 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Sync 3D Visuals
-      p1VisualRef.current.update(p2VisualRef.current.group.position);
-      p2VisualRef.current.update(p1VisualRef.current.group.position);
+      if (p1VisualRef.current && p2VisualRef.current) {
+        p1VisualRef.current.update(p2VisualRef.current.group?.position);
+        p2VisualRef.current.update(p1VisualRef.current.group?.position);
+      }
+      
+      if (refRef.current && refVisualRef.current) {
+          refRef.current.update(p1, p2);
+          refVisualRef.current.update();
+      }
 
       // Camera & Phase Logic
-      if (matchPhase === 'entrance') {
-        const stagePos = new THREE.Vector3(0, 5, -45);
-        camera.position.x += (stagePos.x - camera.position.x) * 0.05;
-        camera.position.z += ((-32) - camera.position.z) * 0.02;
-        camera.position.y += (6 - camera.position.y) * 0.05;
-        camera.lookAt(0, 2, -45);
+      const currentPhase = phaseRef.current;
+      if (currentPhase === 'entrance') {
+        const p1Vis = p1VisualRef.current;
+        if (p1Vis) {
+            if (!p1Vis.userData) (p1Vis as any).userData = {};
+            if (!p1Vis.userData.entranceTimer) p1Vis.userData.entranceTimer = Date.now();
+            const elapsed = (Date.now() - p1Vis.userData.entranceTimer) / 1000;
 
-        // Make fighters walk down towards center (visual only in entrance)
-        p1VisualRef.current.group.position.z += 0.05;
-        if (p1VisualRef.current.group.position.z > 0) p1VisualRef.current.group.position.z = 0;
-        
-        p1.vx = 0; p1.state = 'walk';
-        p2.vx = 0; p2.state = 'walk';
+            if (elapsed < 4) {
+                // Angle 1: High wide from stage
+                camera.position.set(0, 10, -55);
+                camera.lookAt(0, 2, -40);
+            } else if (elapsed < 8) {
+                // Angle 2: Low angle ramp side
+                camera.position.set(-5, 0.5, -35);
+                camera.lookAt(0, 2, -25);
+            } else {
+                // Angle 3: Follow fighter down ramp
+                const fPos = p1Vis.group.position;
+                camera.position.lerp(new THREE.Vector3(fPos.x - 3, fPos.y + 2, fPos.z - 5), 0.05);
+                camera.lookAt(fPos.x, fPos.y + 1.5, fPos.z);
+            }
+
+            // Make fighters walk down towards center (visual only in entrance)
+            p1Vis.group.position.z += 0.05;
+            if (p1Vis.group.position.z > 0) p1Vis.group.position.z = 0;
+            
+            p1.vx = 0; p1.state = 'walk';
+            p2.vx = 0;
+            p2.state = 'idle';
 
         // Auto move to fight after some time
-        if (!p1VisualRef.current.userData) p1VisualRef.current.userData = {};
-        if (!p1VisualRef.current.userData.entranceTimer) p1VisualRef.current.userData.entranceTimer = Date.now();
-        if (Date.now() - p1VisualRef.current.userData.entranceTimer > 12000) {
+        if (elapsed > 12) {
             onPhaseChange?.('fight');
         }
-      } else if (matchPhase === 'victory') {
+        }
+      } else if (currentPhase === 'victory') {
         const winner = p1.hp > p2.hp ? p1VisualRef.current : p2VisualRef.current;
         const orbitAngle = Date.now() * 0.001;
         const targetX = winner.group.position.x + Math.cos(orbitAngle) * 4;
@@ -725,7 +1059,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           };
 
           // Draw effects with projection
-          if (matchPhase === 'entrance') {
+          if (currentPhase === 'entrance') {
               ctx.save();
               ctx.font = '900 14px "Orbitron"';
               ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -768,6 +1102,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           });
 
           // Draw Reversal Prompts (WWE 2k style)
+          [p1, p2].forEach(f => {
+              if (f.reverseWindow > 0 || f.secondaryReverseWindow > 0) {
+                  const pos = project(f.cx, f.cy - 120);
+                  ctx.save();
+                  ctx.translate(pos.x, pos.y);
+                  
+                  // Pulse effect
+                  const pulse = Math.sin(Date.now() * 0.02) * 0.2 + 0.8;
+                  ctx.scale(pulse, pulse);
+                  
+                  ctx.fillStyle = '#ffaa00';
+                  ctx.shadowColor = '#ffff00';
+                  ctx.shadowBlur = 10;
+                  ctx.strokeStyle = '#000';
+                  ctx.lineWidth = 3;
+                  ctx.font = '900 18px "Orbitron"';
+                  ctx.textAlign = 'center';
+                  ctx.strokeText('REVERSAL', 0, 0);
+                  ctx.fillText('REVERSAL', 0, 0);
+                  ctx.restore();
+              }
+          });
           const fighters = [p1Ref.current, p2Ref.current];
           fighters.forEach((f, i) => {
               if (!f || f.isAI) return;
@@ -846,8 +1202,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     switch (w.type) {
       case 'table':
-          ctx.fillStyle = '#532'; ctx.fillRect(-45, -5, 90, 8);
-          ctx.fillStyle = '#421'; ctx.fillRect(-40, 3, 6, 25); ctx.fillRect(34, 3, 6, 25);
+          if (w.durability <= 0) {
+              // Broken Table
+              ctx.fillStyle = '#421'; ctx.fillRect(-45, 10, 30, 8);
+              ctx.fillRect(15, 10, 30, 8);
+              ctx.fillStyle = '#532'; ctx.rotate(0.3); ctx.fillRect(-20, 5, 40, 6);
+          } else {
+              ctx.fillStyle = '#532'; ctx.fillRect(-45, -5, 90, 8);
+              ctx.fillStyle = '#421'; ctx.fillRect(-40, 3, 6, 25); ctx.fillRect(34, 3, 6, 25);
+          }
           break;
       case 'garbage_can':
           ctx.fillStyle = '#888'; ctx.fillRect(-18, -25, 36, 45);
@@ -918,15 +1281,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       <div className="absolute inset-x-0 inset-y-0 pointer-events-none z-10 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_3px,#00000010_3px,#00000010_4px)]" />
       <div className="absolute inset-x-0 inset-y-0 pointer-events-none z-10 bg-[radial-gradient(circle_at_center,transparent_50%,#00000088_100%)]" />
       
-      {/* HUD OVERLAYS (PINNING) */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+      {/* HUD OVERLAYS (PINNING & SUBMISSIONS) */}
+      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-4">
          {p1Ref.current && p1Ref.current.isBeingPinned && (
              <PinBar fighter={p1Ref.current} />
          )}
          {p2Ref.current && p2Ref.current.isBeingPinned && (
              <PinBar fighter={p2Ref.current} />
          )}
+         
+         {p1Ref.current && (p1Ref.current.isSubmitting || p1Ref.current.isBeingSubmitted) && (
+             <SubmissionBar fighter={p1Ref.current} />
+         )}
+         {p2Ref.current && (p2Ref.current.isSubmitting || p2Ref.current.isBeingSubmitted) && p2Data.name !== p1Data.name && (
+             <SubmissionBar fighter={p2Ref.current} />
+         )}
       </div>
+
+      {/* Match Rating */}
+      <MatchRating score={matchScoreRef.current} highlightEvent={matchEventRef.current} />
 
       {/* Cinematic Phase UI */}
       {(matchPhase === 'entrance' || matchPhase === 'victory') && (
@@ -965,20 +1338,61 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 const PinBar = ({ fighter }: { fighter: Fighter }) => {
     const targetW = fighter.pinKickoutTarget * 200;
     const needleX = fighter.pinMeterPos * 200;
+    const healthPercent = (fighter.hp / fighter.maxHp) * 100;
     
     return (
-        <div className="bg-black/60 p-4 border border-zinc-800 backdrop-blur-md">
-            <div className="text-[10px] font-['Orbitron'] text-white text-center mb-2 animate-pulse">PIN!! TAP LIGHT ATTACK TO KICK OUT</div>
-            <div className="relative w-[200px] h-4 bg-zinc-900 border border-zinc-800 overflow-hidden">
+        <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-black/80 p-6 border-2 border-red-600/50 backdrop-blur-xl shadow-[0_0_40px_rgba(220,38,38,0.3)] skew-x-[-12deg]"
+        >
+            <div className="text-[12px] font-['Orbitron'] font-black text-white text-center mb-3 tracking-[2px] skew-x-[12deg] uppercase scale-y-110">
+                P I N F A L L <span className="text-red-500 animate-pulse ml-2">!!!</span>
+            </div>
+            <div className="relative w-[240px] h-6 bg-zinc-950 border border-white/10 overflow-hidden">
                 <div 
-                    className="absolute h-full bg-green-500/50" 
-                    style={{ left: 100 - targetW/2, width: targetW }} 
+                    className="absolute h-full bg-gradient-to-r from-green-500 to-emerald-400" 
+                    style={{ left: 120 - targetW/2, width: targetW }} 
                 />
-                <div 
-                    className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_#fff]" 
-                    style={{ left: needleX }} 
+                <motion.div 
+                    className="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_15px_#fff] z-10" 
+                    animate={{ left: needleX * 1.2 }} 
+                    transition={{ type: 'tween', ease: 'linear', duration: 0 }}
                 />
             </div>
-        </div>
+            <div className="text-[9px] text-zinc-500 font-bold mt-2 text-center skew-x-[12deg] tracking-widest uppercase">
+                Tap <span className="text-white bg-white/10 px-1">LIGHT</span> to Kickout
+            </div>
+        </motion.div>
+    );
+};
+
+const SubmissionBar = ({ fighter }: { fighter: Fighter }) => {
+    const progress = fighter.submissionMeter * 100;
+    const isVictim = fighter.isBeingSubmitted;
+
+    return (
+        <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-black/90 p-6 border-b-4 border-cyan-500 backdrop-blur-xl min-w-[300px]"
+        >
+            <div className="flex justify-between items-center mb-2">
+                <span className="text-cyan-400 text-[10px] font-black uppercase tracking-[3px]">Submission</span>
+                <span className="text-white text-[10px] font-black">{Math.floor(progress)}%</span>
+            </div>
+            <div className="h-3 w-full bg-zinc-900 border border-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                    className={cn(
+                        "h-full transition-all duration-75",
+                        progress > 75 ? "bg-red-500" : (progress > 40 ? "bg-orange-500" : "bg-cyan-500")
+                    )}
+                    style={{ width: `${progress}%` }}
+                />
+            </div>
+            <div className="text-[10px] text-white/50 font-bold mt-3 text-center uppercase tracking-widest animate-pulse">
+                {isVictim ? 'MASH ESCAPE!' : 'FORCE THE TAP!'}
+            </div>
+        </motion.div>
     );
 };

@@ -6,7 +6,7 @@ export type Gender = 'male' | 'female';
 export type BodyType = 'athletic' | 'muscular' | 'heavy' | 'slim' | 'feminine_athletic' | 'feminine_curvy' | 'lean' | 'stocky' | 'amazon' | 'curvy' | 'stocky';
 export type FaceShape = 'sharp' | 'round' | 'square' | 'oval' | 'heart' | 'angular' | 'soft';
 export type AttackType = 'light' | 'heavy' | 'special' | 'ultra' | 'grapple' | 'taunt' | 'whip';
-export type FighterState = 'idle' | 'walk' | 'running' | 'jump' | 'attack' | 'hurt' | 'dead' | 'ragdoll' | 'stunned' | 'grounded' | 'seated' | 'kneeling' | 'corner_seated' | 'on_turnbuckle' | 'on_turnbuckle_middle' | 'tree_of_woe' | 'grappled' | 'being_grappled' | 'carrying' | 'held' | 'submitted' | 'taunting' | 'stagger' | 'victory' | 'climbing_ladder' | 'climbing_cage' | 'reaching' | 'hanging';
+export type FighterState = 'idle' | 'walk' | 'running' | 'jump' | 'attack' | 'hurt' | 'dead' | 'ragdoll' | 'stunned' | 'grounded' | 'seated' | 'kneeling' | 'corner_seated' | 'on_turnbuckle' | 'on_turnbuckle_middle' | 'tree_of_woe' | 'grappled' | 'being_grappled' | 'carrying' | 'held' | 'submitted' | 'taunting' | 'stagger' | 'victory' | 'climbing_ladder' | 'climbing_cage' | 'reaching' | 'hanging' | 'entrance' | 'cutscene';
 
 export interface ArenaObject {
   id: string;
@@ -63,6 +63,7 @@ export interface BodyProportions {
   legLength: number;
   legThickness: number;
   footSize: number;
+  muscleMass: number;
 }
 
 export type Weapons = 'none' | 'katana' | 'mace' | 'staff' | 'brass_knuckles' | 'chair' | 'kendo_stick' | 'sledgehammer' | 'ladder' | 'table' | 'garbage_can' | 'steel_steps' | 'kendo' | 'glass_tube' | 'stop_sign' | 'trash_can';
@@ -88,6 +89,7 @@ export interface Move {
   isHold?: boolean;
   stages?: MoveStage[];
   limbTarget?: 'head' | 'body' | 'arms' | 'legs';
+  isSubmission?: boolean;
 }
 
 export interface BodyDamage {
@@ -241,6 +243,8 @@ export interface CharacterData {
   nationality?: string;
   hometown?: string;
   sweatLevel?: number;
+  hp?: number;
+  stamina?: number;
 
   // Visual Layers
   scars?: string[];
@@ -271,6 +275,7 @@ export interface WeaponObject {
   type: Weapons;
   x: number;
   y: number;
+  z: number;
   vx: number;
   vy: number;
   rotation: number;
@@ -335,8 +340,8 @@ export interface GameState {
   matchCategory?: string;
   timer: number;
   isGameOver: boolean;
-  winnerName: string | null;
-  currentScreen: 'intro' | 'title' | 'menu' | 'fight' | 'customization' | 'selection' | 'match_selection' | 'arena_selection' | 'creation_suite' | 'tournament' | 'arena' | 'select' | 'career' | 'gm' | 'universe' | 'faction' | 'loading';
+  winnerName: null | string;
+  currentScreen: 'intro' | 'title' | 'menu' | 'fight' | 'customization' | 'selection' | 'match_selection' | 'arena_selection' | 'creation' | 'tournament' | 'arena' | 'select' | 'career' | 'gm' | 'universe' | 'faction' | 'loading' | 'promo' | 'cutscene';
   stats: {
     p1: { strikes: number; momentum: number; hp: number };
     p2: { strikes: number; momentum: number; hp: number };

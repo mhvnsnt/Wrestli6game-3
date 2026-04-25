@@ -10,13 +10,13 @@ export class Fighter3DRenderer {
   fighter: Fighter;
   visual: Character3D;
   group: THREE.Group;
+  userData: any = {};
 
   constructor(fighter: Fighter, scene: THREE.Scene) {
     this.fighter = fighter;
     
-    // Create a temporary container for construction as Character3D expects one
-    const dummy = document.createElement('div');
-    this.visual = new Character3D(dummy, fighter.char.cd);
+    // FIX: Pass null so it only builds the geometry, not a new WebGL canvas
+    this.visual = new Character3D(null, fighter.char.cd);
     
     this.group = this.visual.group;
     scene.add(this.group);
@@ -35,9 +35,13 @@ export class Fighter3DRenderer {
 
     const frame = Date.now() / 16;
     
+    // Sync status for dynamic animations
+    this.visual.cd.hp = this.fighter.hp;
+    this.visual.cd.stamina = this.fighter.stamina;
+
     // Pass everything to pose engine
     this.visual.updatePose(
-      this.fighter.state, 
+      this.fighter.poseState || this.fighter.state, 
       frame, 
       this.fighter.facing, 
       this.fighter.vx, 

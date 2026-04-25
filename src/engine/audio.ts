@@ -10,6 +10,7 @@ class SoundEngine {
   }
 
   private soundtrackStarted = false;
+  private soundtrackTimeout: number | null = null;
 
   startSoundtrack() {
     if (this.soundtrackStarted) return;
@@ -18,6 +19,7 @@ class SoundEngine {
     this.soundtrackStarted = true;
     
     const loop = () => {
+      if (!this.soundtrackStarted) return;
       const now = this.ctx!.currentTime;
       const beat = 0.5; // 120 BPM
       for (let i = 0; i < 8; i++) {
@@ -29,9 +31,17 @@ class SoundEngine {
           // Lead pulse
           this.playLead(time, [110, 110, 123, 110][i % 4]);
       }
-      setTimeout(loop, 4000);
+      this.soundtrackTimeout = window.setTimeout(loop, 4000);
     };
     loop();
+  }
+
+  stopSoundtrack() {
+    this.soundtrackStarted = false;
+    if (this.soundtrackTimeout) {
+      window.clearTimeout(this.soundtrackTimeout);
+      this.soundtrackTimeout = null;
+    }
   }
 
   private playSubKick(t: number) {
@@ -161,9 +171,22 @@ class SoundEngine {
     }
   }
 
+  private currentThemeOsc: { stop: () => void } | null = null;
+
+  toggleTheme(active: boolean, themeId?: string) {
+    if (this.currentThemeOsc) {
+      this.currentThemeOsc.stop();
+      this.currentThemeOsc = null;
+    }
+    if (active && themeId) {
+      this.currentThemeOsc = this.playTheme(themeId);
+    }
+  }
+
   playTheme(themeId: string) {
+    if (!themeId) return { stop: () => {} };
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx) return { stop: () => {} };
     const now = this.ctx.currentTime;
     // Generate a procedural theme based on ID hash
     const hash = themeId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -217,8 +240,9 @@ class SoundEngine {
   }
 
   playCrowdChant(themeId: string) {
+    if (!themeId) return { stop: () => {} };
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx) return { stop: () => {} };
     const now = this.ctx.currentTime;
     // Low frequency rhythmic chant
     const osc = this.ctx.createOscillator();

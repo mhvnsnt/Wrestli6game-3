@@ -6,6 +6,8 @@ interface FighterHUDProps {
   side: 'left' | 'right';
   hp: number;
   energy: number;
+  stamina: number;
+  maxStamina: number;
   sigMeter: number;
   finMeter: number;
   sigStocks: number;
@@ -15,7 +17,7 @@ interface FighterHUDProps {
   bodyDamage: BodyDamage;
 }
 
-export const FighterHUD: React.FC<FighterHUDProps> = ({ side, hp, energy, sigMeter, finMeter, sigStocks, finStocks, combo, data, bodyDamage }) => {
+export const FighterHUD: React.FC<FighterHUDProps> = ({ side, hp, energy, stamina, maxStamina, sigMeter, finMeter, sigStocks, finStocks, combo, data, bodyDamage }) => {
   const isLeft = side === 'left';
   
   const getSigColor = (val: number) => {
@@ -65,12 +67,23 @@ export const FighterHUD: React.FC<FighterHUDProps> = ({ side, hp, energy, sigMet
       </div>
 
       {/* Energy Bar */}
-      <div className="w-3/4 h-1.5 bg-black/40 border border-white/10 relative overflow-hidden mb-3">
+      <div className="w-3/4 h-1.5 bg-black/40 border border-white/10 relative overflow-hidden mb-1">
         <motion.div 
           initial={{ width: '60%' }}
           animate={{ width: `${energy}%` }}
           className="h-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]"
         />
+      </div>
+
+      {/* Stamina Bar */}
+      <div className="w-2/3 h-1 bg-black/40 border border-white/5 relative overflow-hidden mb-3">
+          <motion.div 
+            animate={{ 
+                width: `${stamina}%`,
+                backgroundColor: stamina < 30 ? '#f90' : '#fff'
+            }}
+            className="h-full shadow-[0_0_5px_rgba(255,255,255,0.3)]"
+          />
       </div>
 
       {/* MOMENTUM SYSTEMS */}

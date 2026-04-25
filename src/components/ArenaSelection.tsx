@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArenaData } from '../types';
 
 interface ArenaSelectionProps {
+  arenas: ArenaData[];
   onConfirm: (arena: ArenaData) => void;
   onBack: () => void;
 }
@@ -50,10 +51,30 @@ export const ARENAS: ArenaData[] = [
   }
 ];
 
-export const ArenaSelection: React.FC<ArenaSelectionProps> = ({ onConfirm, onBack }) => {
+export const ArenaSelection: React.FC<ArenaSelectionProps> = ({ arenas, onConfirm, onBack }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const selectedArena = ARENAS[selectedIndex];
+  const selectedArena = arenas[selectedIndex];
+
+  React.useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (key === 'w' || key === 'arrowup') {
+        setSelectedIndex(prev => (prev - 1 + arenas.length) % arenas.length);
+      }
+      if (key === 's' || key === 'arrowdown') {
+        setSelectedIndex(prev => (prev + 1) % arenas.length);
+      }
+      if (key === 'enter' || key === 'f') {
+        onConfirm(arenas[selectedIndex]);
+      }
+      if (key === 'b' || key === 'escape') {
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedIndex, onConfirm, onBack]);
 
   return (
     <motion.div 
@@ -81,7 +102,7 @@ export const ArenaSelection: React.FC<ArenaSelectionProps> = ({ onConfirm, onBac
       <div className="flex-1 flex flex-col lg:flex-row gap-6 lg:gap-12 min-h-0 relative">
         <div className="w-full lg:w-[400px] flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-2 flex-none min-h-0">
            <div className="flex lg:flex-col gap-2">
-             {ARENAS.map((arena, idx) => (
+             {arenas.map((arena, idx) => (
                <motion.button
                  key={arena.id}
                  whileHover={{ x: 10 }}

@@ -1,5 +1,5 @@
 import { Move, Moveset } from '../types';
-import { createPowerbomb, createChokeslam, createDDT, createTigerMove, createCornerMove } from './moves';
+import { createPowerbomb, createChokeslam, createDDT, createTigerMove, createCornerMove, createFinisher, createGenericStrike, createSubmission, createIconicMove } from './moves';
 
 export const MoveLibrary: any = {
     // Powerbombs
@@ -8,6 +8,27 @@ export const MoveLibrary: any = {
     POWERBOMB_AVALANCHE: createPowerbomb('Avalanche Powerbomb', 'avalanche'),
     POWERBOMB_TOP_ROPE: createPowerbomb('Top Rope Powerbomb', 'top_rope'),
     POWERBOMB_NORMAL: createPowerbomb('Powerbomb', 'normal'),
+    
+    // Finishers
+    STUNNER: createFinisher('Stunner', 'stunner'),
+    RKO: createFinisher('Sovereign Cutter', 'rko'),
+    GERMAN_SUPLEX: createFinisher('German Suplex', 'german'),
+    BULLDOG: createFinisher('Running Bulldog', 'bulldog'),
+    TOMBSTONE: createIconicMove('Tombstone Piledriver', 'tombstone'),
+    F5: createIconicMove('F-5', 'f5'),
+    AA: createIconicMove('Attitude Adjustment', 'aa'),
+    ROCK_BOTTOM: createIconicMove('Rock Bottom', 'rock_bottom'),
+    PEDIGREE: createIconicMove('Pedigree', 'pedigree'),
+    SHARPSHOOTER: createIconicMove('Sharpshooter', 'sharpshooter'),
+    
+    // Strikes
+    HEADBUTT: createGenericStrike('European Headbutt', 'headbutt'),
+    KNEE_STRIKE: createGenericStrike('Shining Wizard', 'knee'),
+    
+    // Submissions
+    SLEEPER: createSubmission('Sleeper Hold', 'head'),
+    ARM_BAR: createSubmission('Fujiwara Armbar', 'arm'),
+    ANKLE_LOCK: createSubmission('Ankle Lock', 'leg'),
     
     // Chokeslams
     CHOKESLAM_1: createChokeslam('Chokeslam', 1),
@@ -39,9 +60,7 @@ export const MoveLibrary: any = {
     POWERSLAM: { name: 'Powerslam', dmg: 23, kx: 3, ky: -14, time: 52, category: 'standing', animation: 'grapple' },
     PILEDRIVER: { name: 'Piledriver', dmg: 28, kx: 1, ky: -20, time: 65, category: 'standing', animation: 'grapple' },
     BRAINBUSTER: { name: 'Brainbuster', dmg: 27, kx: 2, ky: -18, time: 62, category: 'standing', animation: 'grapple' },
-    F5: { name: 'Cyclone F5', dmg: 35, kx: 5, ky: -8, time: 80, category: 'standing', animation: 'ultra' },
     GTS: { name: 'G.T.S.', dmg: 34, kx: 2, ky: -12, time: 75, category: 'standing', animation: 'ultra' },
-    RKO: { name: 'R.K.O.', dmg: 32, kx: 5, ky: -5, time: 45, category: 'standing', animation: 'ultra' },
     SPEAR: { name: 'Spear', dmg: 28, kx: 8, ky: -2, time: 40, category: 'standing', animation: 'ultra' },
     CURB_STOMP: { name: 'Curb Stomp', dmg: 29, kx: 2, ky: -22, time: 50, category: 'standing', animation: 'ultra' },
 
@@ -50,13 +69,13 @@ export const MoveLibrary: any = {
         
         return {
             light: [emptyMove('Jab'), emptyMove('Straight'), emptyMove('Low Kick'), emptyMove('Hook'), emptyMove('Uppercut')],
-            heavy: [emptyMove('Big Boot'), emptyMove('Dropkick'), emptyMove('Lariat'), emptyMove('Roundhouse'), emptyMove('Side Kick')],
+            heavy: [MoveLibrary.HEADBUTT, MoveLibrary.KNEE_STRIKE, emptyMove('Lariat'), emptyMove('Roundhouse'), emptyMove('Side Kick')],
             grapples: [MoveLibrary.POWERBOMB_NORMAL, MoveLibrary.CHOKESLAM_1, MoveLibrary.DDT_1, MoveLibrary.SAMOAN_DROP, MoveLibrary.POWERSLAM],
-            backGrapples: [emptyMove('Back Suplex'), emptyMove('German Suplex')],
+            backGrapples: [MoveLibrary.GERMAN_SUPLEX, emptyMove('Back Suplex')],
             
-            groundHead: [MoveLibrary.DDT_1, emptyMove('Stomp'), emptyMove('Elbow Drop')],
-            groundSide: [emptyMove('Knee Drop'), emptyMove('Rib Breaker'), emptyMove('Leg Drop')],
-            groundFeet: [emptyMove('Leg Lock'), emptyMove('Ankle Lock'), emptyMove('Texas Cloverleaf')],
+            groundHead: [MoveLibrary.SLEEPER, emptyMove('Stomp'), emptyMove('Elbow Drop')],
+            groundSide: [MoveLibrary.ARM_BAR, emptyMove('Rib Breaker'), emptyMove('Leg Drop')],
+            groundFeet: [MoveLibrary.ANKLE_LOCK, emptyMove('Ankle Lock'), emptyMove('Texas Cloverleaf')],
             groundSeated: [emptyMove('Penalty Kick'), emptyMove('Low Dropkick'), emptyMove('Sleeper')],
             groundKneeling: [emptyMove('Knee Strike'), emptyMove('Kneeling DDT')],
             
@@ -86,16 +105,16 @@ export const MoveLibrary: any = {
             
             runningStrike: [emptyMove('Running Clothesline'), emptyMove('Running Knee')],
             runningHeavy: [emptyMove('Running Big Boot')],
-            runningGrapple: [emptyMove('Running Bulldog'), emptyMove('Running DDT')],
+            runningGrapple: [MoveLibrary.BULLDOG, emptyMove('Running DDT')],
             runningGroundStrike: [emptyMove('Running Senton')],
             irishWhipRebound: [emptyMove('Pop-up Powerbomb')],
             reboundStrike: [emptyMove('Rebound Kick')],
             reboundHeavy: [emptyMove('Rebound Lariat')],
-            reboundGrapple: [emptyMove('Rebound Powerslam')],
+            reboundGrapple: [MoveLibrary.ROCK_BOTTOM, emptyMove('Rebound Powerslam')],
             pullBack: [emptyMove('Short-arm Clothesline')],
             
-            signatures: [MoveLibrary.TIGER_DRIVER_96],
-            finishers: [MoveLibrary.TIGER_BOMB],
+            signatures: [MoveLibrary.TIGER_DRIVER_96, MoveLibrary.STUNNER, MoveLibrary.BULLDOG, MoveLibrary.PEDIGREE],
+            finishers: [MoveLibrary.TIGER_BOMB, MoveLibrary.RKO, MoveLibrary.TOMBSTONE, MoveLibrary.F5, MoveLibrary.AA, MoveLibrary.SHARPSHOOTER],
             paybacks: [],
             comebacks: [],
             taunts: { standing: [emptyMove('Taunt 1')], corner: [emptyMove('Taunt Corner')], apron: [], ground: [] },
