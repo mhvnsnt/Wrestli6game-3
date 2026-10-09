@@ -1163,21 +1163,7 @@ export class Character3D {
                 strip.scale.y = 1 + Math.random() * 0.4;
                 this.hairGroup.add(strip);
             }
-        } else {
-            const hairCount = cd.hairStyle === 'wild' ? 32 : 16;
-            for(let i=0; i<hairCount; i++) {
-                const pieceGeo = new THREE.SphereGeometry(this.baseHeadSize * 0.25, 8, 8);
-                const piece = new THREE.Mesh(pieceGeo, hairMat);
-                const angle = (i / hairCount) * Math.PI * 2;
-                piece.position.set(
-                    Math.cos(angle) * this.baseHeadSize * 0.6,
-                    Math.random() * 0.4 * this.baseHeadSize + 0.4 * this.baseHeadSize,
-                    Math.sin(angle) * this.baseHeadSize * 0.6
-                );
-                piece.scale.set(1, 1.2, 0.6);
-                this.hairGroup.add(piece);
-            }
-        } else if (cd.hairStyle === 'ponytail') {
+} else if (cd.hairStyle === 'ponytail') {
             // Cap on top + a tail trailing down the back of the head.
             const capGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.03, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
             this.hairGroup.add(new THREE.Mesh(capGeo, hairMat));
@@ -1206,6 +1192,20 @@ export class Character3D {
             }
             const capGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.03, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
             this.hairGroup.add(new THREE.Mesh(capGeo, hairMat));
+        } else {
+            const hairCount = cd.hairStyle === 'wild' ? 32 : 16;
+            for(let i=0; i<hairCount; i++) {
+                const pieceGeo = new THREE.SphereGeometry(this.baseHeadSize * 0.25, 8, 8);
+                const piece = new THREE.Mesh(pieceGeo, hairMat);
+                const angle = (i / hairCount) * Math.PI * 2;
+                piece.position.set(
+                    Math.cos(angle) * this.baseHeadSize * 0.6,
+                    Math.random() * 0.4 * this.baseHeadSize + 0.4 * this.baseHeadSize,
+                    Math.sin(angle) * this.baseHeadSize * 0.6
+                );
+                piece.scale.set(1, 1.2, 0.6);
+                this.hairGroup.add(piece);
+            }
         }
     }
 
