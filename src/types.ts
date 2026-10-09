@@ -28,7 +28,11 @@ export interface ClothingData {
   top: string;
   bottom: string;
   extra: string;
-  mask?: string;
+  mask?: string;              // style: 'none' | 'full' | 'half' | 'lucha' | 'eye_mask' (legacy 'warrior'/'skull' map to 'full')
+  maskColor?: string;
+  hood?: string;              // 'none' | 'up' | 'down'
+  chain?: string;             // 'none' | 'gold' | 'silver' | 'spiked'
+  chainColor?: string;
   facepaint?: string;
   makeup?: string;
   elbowPadL?: string;
@@ -37,10 +41,13 @@ export interface ClothingData {
   kneePadR?: string;
   wristbandL?: string;
   wristbandR?: string;
+  wristbandColor?: string;
   gloveL?: string;
   gloveR?: string;
+  gloveColor?: string;
   socks?: string;
-  boots?: string;
+  boots?: string;             // shoe style: 'none' | 'boots' | 'sneakers' | 'wrestling' | 'wraps' (legacy 'regular' = 'boots')
+  shoeColor?: string;
   kickpads?: string;
   fingerTapeL?: string;
   fingerTapeR?: string;
@@ -350,10 +357,31 @@ export interface GameState {
 
 export const SKIN_COLORS = ['#fde0be', '#f5c49a', '#e8a87c', '#c8845a', '#a06040', '#7a4030', '#3c1f10'];
 export const HAIR_COLORS = ['#111111', '#2a1a0a', '#5a3010', '#8b4513', '#c8a050', '#e8d080', '#e8e0d0', '#ff2244', '#4488ff', '#22cc88', '#cc44ff', '#ff8822'];
-export const EYE_COLORS = ['#3a7acc', '#2a9a55', '#884422', '#cc9922', '#aa44cc', '#ff2244', '#888899'];
+export const EYE_COLORS = ['#3a7acc', '#2a9a55', '#884422', '#cc9922', '#aa44cc', '#ff2244', '#888899', '#241408', '#9fd4e8', '#0a0a0a', '#c07f1a', '#e0e0e0'];
+
+/**
+ * Named iris-color palette (suite alignment — ported from the AshLane
+ * customizer's eye-colors module: id/label/hex so the UI can show names).
+ * EYE_COLORS stays the raw-hex array for the procedural roster filler.
+ */
+export interface EyeColorPreset { id: string; label: string; hex: string; }
+export const EYE_COLOR_PRESETS: EyeColorPreset[] = [
+  { id: 'ice_blue',   label: 'ICE BLUE',   hex: '#3a7acc' },
+  { id: 'green',      label: 'GREEN',      hex: '#2a9a55' },
+  { id: 'hazel',      label: 'HAZEL',      hex: '#884422' },
+  { id: 'gold',       label: 'GOLD',       hex: '#cc9922' },
+  { id: 'violet',     label: 'VIOLET',     hex: '#aa44cc' },
+  { id: 'blood_red',  label: 'BLOOD RED',  hex: '#ff2244' },
+  { id: 'gray',       label: 'GRAY',       hex: '#888899' },
+  { id: 'dark_brown', label: 'DARK BROWN', hex: '#241408' },
+  { id: 'frost',      label: 'FROST',      hex: '#9fd4e8' },
+  { id: 'black',      label: 'BLACK',      hex: '#0a0a0a' },
+  { id: 'amber',      label: 'AMBER',      hex: '#c07f1a' },
+  { id: 'ghost',      label: 'GHOST',      hex: '#e0e0e0' },
+];
 export const CLOTH_COLORS = ['#111111', '#1a1a2a', '#2a0a10', '#0a102a', '#661122', '#aa3300', '#004488', '#228844', '#885500', '#ffffff', '#e8d5a0', '#660066'];
 
-export const HAIR_STYLES = ['short_back', 'mohawk', 'long_straight', 'braid', 'spiky', 'afro', 'bun', 'ponytail', 'undercut', 'wild'];
+export const HAIR_STYLES = ['short_back', 'mohawk', 'long_straight', 'braid', 'spiky', 'afro', 'bun', 'ponytail', 'undercut', 'wild', 'none', 'bald', 'buzz'];
 export const BODY_TYPES: BodyType[] = ['athletic', 'muscular', 'heavy', 'slim', 'feminine_athletic', 'feminine_curvy', 'lean'];
 export const FACE_SHAPES: FaceShape[] = ['sharp', 'round', 'square', 'oval', 'heart', 'angular'];
 
@@ -361,7 +389,12 @@ export const CLOTHING_OPTIONS = {
   tops: ['bare', 'tank', 'tshirt', 'gi', 'armor', 'robe', 'bodysuit', 'jacket', 'hoodie', 'crop_top'],
   bottoms: ['shorts', 'pants', 'gi_pants', 'armored', 'skirt', 'robe_bottom', 'leggings', 'trunks', 'tights'],
   extras: ['none', 'belt', 'sash', 'armor_chest', 'cloak', 'cape', 'elbow_pads', 'knee_pads', 'hand_wraps', 'wristbands'],
-  facepaints: ['none', 'sting', 'warrior', 'crow', 'venom', 'skull', 'kabuki', 'ghoul', 'samoan']
+  facepaints: ['none', 'sting', 'warrior', 'crow', 'venom', 'skull', 'kabuki', 'ghoul', 'samoan'],
+  masks: ['none', 'full', 'half', 'lucha', 'eye_mask'],
+  hoods: ['none', 'up', 'down'],
+  chains: ['none', 'gold', 'silver', 'spiked'],
+  gloveStyles: ['none', 'regular', 'mma', 'boxing', 'fingerless'],
+  shoeStyles: ['none', 'boots', 'sneakers', 'wrestling', 'wraps'],
 };
 
 export function getDefaultCharData(id: number): CharacterData {

@@ -8,7 +8,7 @@ import {
   CharacterData, 
   SKIN_COLORS, 
   HAIR_COLORS, 
-  EYE_COLORS, 
+  EYE_COLOR_PRESETS,
   CLOTH_COLORS, 
   HAIR_STYLES, 
   BODY_TYPES, 
@@ -23,6 +23,7 @@ import { Character3D } from '../engine/character3d';
 import { MoveLibrary } from '../engine/moveLibrary';
 import { calculateGematria, calculateNumerology } from '../engine/sovereign';
 import { ROSTER, TEAMS } from '../data/roster';
+import { loadBuild, saveBuild, exportBuildsFile } from '../engine/customizerPersistence';
 import { 
   User, 
   Shield, 
@@ -58,6 +59,8 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
   const [showExitModal, setShowExitModal] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const char3dRef = useRef<Character3D | null>(null);
+  const zoomRef = useRef<number>(3);
+  const [savedBuild, setSavedBuild] = useState<CharacterData | null>(null);
 
   const displayRoster = availableCharacters || ROSTER;
 
@@ -120,9 +123,21 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
       container.releasePointerCapture(e.pointerId);
     };
 
+    // Suite alignment: wheel zoom on the live preview (AshLane preview pattern).
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      zoomRef.current = Math.min(6.5, Math.max(1.6, zoomRef.current + Math.sign(e.deltaY) * 0.3));
+      char3dRef.current?.setZoom(zoomRef.current);
+    };
+    const onDblClick = () => {
+      resetView();
+    };
+
     container.addEventListener('pointerdown', onPointerDown);
     container.addEventListener('pointermove', onPointerMove);
     container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('dblclick', onDblClick);
     
     const handleResize = () => char3dRef.current?.resize();
     window.addEventListener('resize', handleResize);
@@ -132,6 +147,8 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
       container.removeEventListener('pointerdown', onPointerDown);
       container.removeEventListener('pointermove', onPointerMove);
       container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('dblclick', onDblClick);
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
       if (char3dRef.current) {
@@ -164,8 +181,18 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
   }, [view, hasChanged, onCancel]);
 
   const resetView = () => {
+    zoomRef.current = 3;
+    char3dRef.current?.setZoom(3);
     setCd(prev => ({ ...prev, yaw: 0, tilt: 0, zoom: 1 }));
   };
+
+  // Suite alignment: persisted builds (the AshLane persistence pattern) —
+  // offer a restore whenever a saved build exists for this fighter.
+  useEffect(() => {
+    if (view === 'edit') {
+      setSavedBuild(loadBuild(initialData.name));
+    }
+  }, [view, initialData.name]);
 
   const update = (key: string, val: any) => {
     setCd(prev => {
@@ -569,6 +596,28 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
         </button>
       </div>
 
+      {savedBuild && JSON.stringify(savedBuild) !== JSON.stringify(cd) && (
+        <div className="w-full max-w-7xl mb-4 flex items-center justify-between bg-red-600/10 border border-red-600/50 px-6 py-3">
+          <div className="text-[10px] font-black tracking-[3px] text-red-400 uppercase">
+            SAVED_BUILD_FOUND // {savedBuild.name}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setCd(JSON.parse(JSON.stringify(savedBuild))); setSavedBuild(null); }}
+              className="px-4 py-2 bg-red-600 text-white text-[9px] font-black tracking-[2px] uppercase hover:bg-white hover:text-black transition-all"
+            >
+              RESTORE_BUILD
+            </button>
+            <button
+              onClick={() => setSavedBuild(null)}
+              className="px-4 py-2 border border-zinc-700 text-zinc-500 text-[9px] font-black tracking-[2px] uppercase hover:text-white transition-all"
+            >
+              DISMISS
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row gap-8 w-full h-[calc(100%-120px)] max-w-7xl">
         {showExitModal && (
             <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4">
@@ -626,7 +675,7 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
                     <Sparkles size={14} />
                 </button>
             </div>
-            <div className="text-[10px] tracking-[4px] text-zinc-600 mt-4 uppercase font-bold">BIO-METRIC FEED // DRAG TO ROTATE</div>
+            <div className="text-[10px] tracking-[4px] text-zinc-600 mt-4 uppercase font-bold">BIO-METRIC FEED // DRAG TO ROTATE · SCROLL TO ZOOM</div>
           </div>
 
           <div className="bg-[#0f0f11] border border-zinc-800 p-6 flex flex-col gap-4">
@@ -814,9 +863,17 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label>EYE_COLOR</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {EYE_COLORS.map(c => (
-                          <ColorSwatch key={c} color={c} active={cd.eyeColor === c} onClick={() => update('eyeColor', c)} />
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {EYE_COLOR_PRESETS.map(p => (
+                          <button
+                            key={p.id}
+                            onClick={() => update('eyeColor', p.hex)}
+                            className={`flex items-center gap-2 p-1.5 border transition-all ${cd.eyeColor === p.hex ? 'border-red-600 bg-red-600/10' : 'border-zinc-800 hover:border-zinc-600'}`}
+                            title={p.label}
+                          >
+                            <div className="w-5 h-5 border border-black shrink-0" style={{ backgroundColor: p.hex }} />
+                            <span className="text-[8px] font-black tracking-wider text-zinc-300 uppercase truncate">{p.label}</span>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -873,6 +930,26 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
                                 ))}
                             </div>
                         </div>
+                        {cd.clothing.facepaint && cd.clothing.facepaint !== 'none' && (
+                          <>
+                            <div className="flex items-center gap-4">
+                                <Label>PAINT_BASE</Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {['#ffffff', '#e8e0d0', '#c0c0c0', '#ff2244', '#228844', '#4488ff', '#000000'].map(c => (
+                                        <ColorSwatch key={c} color={c} active={(cd.faceColor1 || '#ffffff') === c} onClick={() => update('faceColor1', c)} />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <Label>PAINT_ACCENT</Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {['#000000', '#ff2244', '#ffffff', '#4488ff', '#22cc88', '#ff8800', '#aa44cc'].map(c => (
+                                        <ColorSwatch key={c} color={c} active={(cd.faceColor2 || '#000000') === c} onClick={() => update('faceColor2', c)} />
+                                    ))}
+                                </div>
+                            </div>
+                          </>
+                        )}
                         <div className="flex items-center gap-4">
                             <Label>SIGIL_SCARS</Label>
                             <div className="flex flex-wrap gap-2">
@@ -945,8 +1022,65 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
                     </div>
                 </Section>
 
+                <Section title="HEADGEAR">
+                    <div className="flex items-center gap-4">
+                        <Label>MASK_STYLE</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTHING_OPTIONS.masks.map(t => (
+                                <OptionBtn key={t} active={(cd.clothing.mask || 'none') === t} onClick={() => update('clothing.mask', t)}>
+                                    {t.replace('_', ' ')}
+                                </OptionBtn>
+                            ))}
+                        </div>
+                    </div>
+                    {(cd.clothing.mask && cd.clothing.mask !== 'none') && (
+                        <div className="flex flex-col gap-2">
+                            <Label>MASK_COLOR</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {CLOTH_COLORS.map(c => (
+                                    <ColorSwatch key={c} color={c} active={(cd.clothing.maskColor || cd.extraColor) === c} onClick={() => update('clothing.maskColor', c)} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-4">
+                        <Label>HOOD</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTHING_OPTIONS.hoods.map(t => (
+                                <OptionBtn key={t} active={(cd.clothing.hood || 'none') === t} onClick={() => update('clothing.hood', t)}>
+                                    {t}
+                                </OptionBtn>
+                            ))}
+                        </div>
+                    </div>
+                </Section>
+
+                <Section title="CHAIN_AND_MEDALLION">
+                    <div className="flex items-center gap-4">
+                        <Label>CHAIN</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTHING_OPTIONS.chains.map(t => (
+                                <OptionBtn key={t} active={(cd.clothing.chain || 'none') === t} onClick={() => update('clothing.chain', t)}>
+                                    {t}
+                                </OptionBtn>
+                            ))}
+                        </div>
+                    </div>
+                    {(cd.clothing.chain && cd.clothing.chain !== 'none') && (
+                        <div className="flex flex-col gap-2">
+                            <Label>CHAIN_METAL</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {['#d4af37', '#c0c0c0', '#8a6a1f', '#ffffff', '#ff2244', '#111111'].map(c => (
+                                    <ColorSwatch key={c} color={c} active={(cd.clothing.chainColor || (cd.clothing.chain === 'silver' ? '#c0c0c0' : cd.clothing.chain === 'spiked' ? '#8a6a1f' : '#d4af37')) === c} onClick={() => update('clothing.chainColor', c)} />
+                                ))}
+                            </div>
+                            <div className="text-[8px] text-zinc-600 italic uppercase">MEDALLION_TINTED_BY_SIGIL_FREQ</div>
+                        </div>
+                    )}
+                </Section>
+
                 <Section title="ARMAMENT_LAYER">
-                    {['elbowPadL','elbowPadR','kneePadL','kneePadR','wristbandL','wristbandR','gloveL', 'gloveR', 'boots', 'kickpads'].map(item => (
+                    {['elbowPadL','elbowPadR','kneePadL','kneePadR','kickpads'].map(item => (
                         <div key={item} className="flex items-center gap-4">
                             <Label>{item.replace(/([A-Z])/g, '_$1').toUpperCase()}</Label>
                             <div className="flex flex-wrap gap-2">
@@ -958,6 +1092,69 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
                             </div>
                         </div>
                     ))}
+                    {['wristbandL','wristbandR'].map(item => (
+                        <div key={item} className="flex items-center gap-4">
+                            <Label>{item.replace(/([A-Z])/g, '_$1').toUpperCase()}</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {['none', 'regular'].map(opt => (
+                                    <OptionBtn key={opt} active={(cd.clothing as any)?.[item] === opt} onClick={() => update(`clothing.${item}`, opt)}>
+                                        {opt}
+                                    </OptionBtn>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="flex flex-col gap-2">
+                        <Label>WRISTBAND_COLOR</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTH_COLORS.map(c => (
+                                <ColorSwatch key={c} color={c} active={(cd.clothing.wristbandColor || cd.extraColor) === c} onClick={() => update('clothing.wristbandColor', c)} />
+                            ))}
+                        </div>
+                    </div>
+                    {['gloveL', 'gloveR'].map(item => (
+                        <div key={item} className="flex items-center gap-4">
+                            <Label>{item.replace(/([A-Z])/g, '_$1').toUpperCase()}</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {CLOTHING_OPTIONS.gloveStyles.map(opt => (
+                                    <OptionBtn key={opt} active={(cd.clothing as any)?.[item] === opt} onClick={() => update(`clothing.${item}`, opt)}>
+                                        {opt}
+                                    </OptionBtn>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="flex flex-col gap-2">
+                        <Label>GLOVE_COLOR</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTH_COLORS.map(c => (
+                                <ColorSwatch key={c} color={c} active={(cd.clothing.gloveColor || cd.extraColor) === c} onClick={() => update('clothing.gloveColor', c)} />
+                            ))}
+                        </div>
+                    </div>
+                </Section>
+
+                <Section title="FOOTWEAR">
+                    <div className="flex items-center gap-4">
+                        <Label>SHOE_STYLE</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {CLOTHING_OPTIONS.shoeStyles.map(t => (
+                                <OptionBtn key={t} active={(cd.clothing.boots || 'none') === t || ((cd.clothing.boots === 'regular') && t === 'boots')} onClick={() => update('clothing.boots', t)}>
+                                    {t}
+                                </OptionBtn>
+                            ))}
+                        </div>
+                    </div>
+                    {(cd.clothing.boots && cd.clothing.boots !== 'none') && (
+                        <div className="flex flex-col gap-2">
+                            <Label>SHOE_COLOR</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {CLOTH_COLORS.map(c => (
+                                    <ColorSwatch key={c} color={c} active={(cd.clothing.shoeColor || cd.extraColor) === c} onClick={() => update('clothing.shoeColor', c)} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </Section>
 
                 <Section title="COLOR_VAL">
@@ -1103,6 +1300,18 @@ export const Customizer: React.FC<CustomizerProps> = ({ initialData, availableCh
           className="flex-1 py-4 font-['Orbitron'] text-[11px] font-black tracking-[6px] uppercase bg-white text-black hover:bg-red-600 hover:text-white transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
         >
           SAVE SUPERSTAR
+        </button>
+        <button
+          onClick={() => { saveBuild(cd); setSavedBuild(JSON.parse(JSON.stringify(cd))); }}
+          className="px-12 py-4 font-['Orbitron'] text-[11px] font-black tracking-[4px] uppercase bg-red-600 text-white hover:bg-white hover:text-black transition-all"
+        >
+          SAVE BUILD
+        </button>
+        <button
+          onClick={() => exportBuildsFile({ [cd.name]: cd })}
+          className="px-12 py-4 font-['Orbitron'] text-[11px] font-black tracking-[4px] uppercase border border-zinc-800 text-zinc-500 hover:border-zinc-400 hover:text-white transition-all"
+        >
+          EXPORT
         </button>
         <button
           onClick={onCancel}

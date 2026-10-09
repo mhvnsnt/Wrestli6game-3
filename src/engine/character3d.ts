@@ -4,6 +4,175 @@
 
 import * as THREE from 'three';
 import { CharacterData } from '../types';
+import { makeIrisTexture } from './eyeColor';
+
+/**
+ * Normalize a mask style id. Legacy roster values ('warrior', 'skull')
+ * map to 'full'; unknown values fall back to 'full' rather than vanishing.
+ */
+export function normalizeMaskStyle(raw: string | undefined): string {
+  if (!raw || raw === 'none') return 'none';
+  if (raw === 'warrior' || raw === 'skull') return 'full';
+  const known = ['full', 'half', 'lucha', 'eye_mask'];
+  return known.includes(raw) ? raw : 'full';
+}
+
+/**
+ * Normalize a shoe style id. Legacy 'regular' boots map to the full 'boots' style.
+ */
+export function normalizeShoeStyle(raw: string | undefined): string {
+  if (!raw || raw === 'none') return 'none';
+  if (raw === 'regular') return 'boots';
+  const known = ['boots', 'sneakers', 'wrestling', 'wraps'];
+  return known.includes(raw) ? raw : 'boots';
+}
+
+/**
+ * Layered face-paint decals, painted onto the skin canvas texture.
+ * (Suite alignment — the AshLane facepaint lane's layer approach, adapted
+ * procedurally: a base layer from faceColor1 plus an accent layer from
+ * faceColor2 on the 128px face region of the canvas.)
+ */
+export function paintFacePaint(
+  ctx: CanvasRenderingContext2D,
+  style: string,
+  base: string,
+  accent: string
+): void {
+  ctx.save();
+  switch (style) {
+    case 'skull': {
+      // Bone-white mask with hollow eyes and teeth — the legacy pattern.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(30, 30, 70, 70);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      ctx.fillRect(40, 50, 10, 10);   // eye sockets
+      ctx.fillRect(78, 50, 10, 10);
+      ctx.beginPath();                // nose cavity
+      ctx.moveTo(64, 66); ctx.lineTo(59, 74); ctx.lineTo(69, 74);
+      ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 5; i++) {   // teeth lines
+        ctx.fillRect(42 + i * 9, 84, 3, 10);
+      }
+      break;
+    }
+    case 'sting': {
+      // Half-face: base on the left half, accent diagonal slashes.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(8, 12, 56, 104);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      for (let i = 0; i < 4; i++) {
+        ctx.save();
+        ctx.translate(20 + i * 12, 60);
+        ctx.rotate(0.5);
+        ctx.fillRect(-3, -40, 6, 80);
+        ctx.restore();
+      }
+      break;
+    }
+    case 'warrior': {
+      // Full base with accent war bands across eyes and forehead.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(20, 12, 88, 104);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      ctx.fillRect(20, 36, 88, 14);   // eye band
+      ctx.fillRect(20, 20, 88, 6);    // forehead band
+      break;
+    }
+    case 'crow': {
+      // Dark mask across the eyes, base streaks down the cheeks.
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(24, 36, 80, 18);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = base;
+      ctx.fillRect(44, 54, 6, 40);
+      ctx.fillRect(78, 54, 6, 40);
+      break;
+    }
+    case 'venom': {
+      // Pale base with a jagged accent maw ring.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(24, 24, 80, 84);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.ellipse(64, 84, 26, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = base;           // jagged teeth
+      for (let i = 0; i < 7; i++) {
+        const x = 42 + i * 6.2;
+        ctx.beginPath();
+        ctx.moveTo(x, 76); ctx.lineTo(x + 3, 84); ctx.lineTo(x + 6, 76);
+        ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'kabuki': {
+      // White stage base with accent eye wings and lips.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(24, 16, 80, 96);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      ctx.beginPath();                // left wing
+      ctx.moveTo(30, 46); ctx.lineTo(58, 42); ctx.lineTo(58, 52); ctx.lineTo(30, 52);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();                // right wing
+      ctx.moveTo(98, 46); ctx.lineTo(70, 42); ctx.lineTo(70, 52); ctx.lineTo(98, 52);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(54, 88, 20, 7);    // lips
+      break;
+    }
+    case 'ghoul': {
+      // Ashen base, hollow accent eyes, drips from the mouth.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(20, 12, 88, 104);
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = accent;
+      ctx.beginPath(); ctx.ellipse(44, 48, 9, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(84, 48, 9, 11, 0, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(52 + i * 8, 86, 4, 14 + i * 4);
+      }
+      break;
+    }
+    case 'samoan': {
+      // Tribal accent bands: forehead chevron, chin stripes.
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();                // forehead chevron
+      ctx.moveTo(28, 30); ctx.lineTo(64, 44); ctx.lineTo(100, 30);
+      ctx.lineTo(100, 38); ctx.lineTo(64, 52); ctx.lineTo(28, 38);
+      ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 4; i++) {   // chin stripes
+        ctx.fillRect(34 + i * 16, 88, 8, 20);
+      }
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = base;           // brow dots
+      ctx.beginPath(); ctx.arc(52, 40, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(76, 40, 3, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    default: {
+      // Unknown style: a simple base wash so the selection is visible.
+      ctx.fillStyle = base;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(24, 16, 80, 96);
+      break;
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1.0;
+}
 
 export class Character3D {
   scene?: THREE.Scene;
@@ -506,15 +675,16 @@ export class Character3D {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
-    // Layered Decals (Facepaint / Tattoos)
-    if (cd.clothing.facepaint === 'skull') {
-        ctx.fillStyle = '#fff';
-        ctx.globalAlpha = 0.8;
-        ctx.fillRect(30, 30, 70, 70);
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = '#000';
-        ctx.fillRect(40, 50, 10, 10);
-        ctx.fillRect(78, 50, 10, 10);
+    // Layered Face-Paint Decals (suite alignment: base + accent layers from
+    // faceColor1/faceColor2 — the AshLane facepaint lane's decal approach,
+    // adapted procedurally here).
+    if (cd.clothing.facepaint && cd.clothing.facepaint !== 'none') {
+        paintFacePaint(
+            ctx,
+            cd.clothing.facepaint,
+            cd.faceColor1 || '#ffffff',
+            cd.faceColor2 || '#000000'
+        );
     }
 
     // Procedural Tattoos
@@ -614,7 +784,11 @@ export class Character3D {
         metalness: 0.1
     });
     const eyeMat = new THREE.MeshStandardMaterial({ color: '#fff', roughness: 0.1 });
-    const irisMat = new THREE.MeshStandardMaterial({ color: cd.eyeColor || '#111' });
+    // Suite alignment — procedural iris texture (limbal ring + striations +
+    // pupil) driven by the player's eye color, never touching skin.
+    const irisMat = new THREE.MeshStandardMaterial({ roughness: 0.25 });
+    irisMat.map = makeIrisTexture(cd.eyeColor || '#111111');
+    irisMat.needsUpdate = true;
     const bottomMat = new THREE.MeshStandardMaterial({ color: effectiveBottomColor, roughness: 0.8 });
     const topMat = new THREE.MeshStandardMaterial({ color: effectiveTopColor, roughness: 0.8 });
     const extraMat = new THREE.MeshStandardMaterial({ color: effectiveExtraColor, roughness: 0.5, metalness: 0.5 });
@@ -811,19 +985,115 @@ export class Character3D {
 
     // Head Pieces Group
     this.headMesh.add(this.hairGroup);
-    
-    // MASK / FACEPAINT (LAYERED DECALS)
-    if (effectiveClothing.mask && effectiveClothing.mask !== 'none') {
-        const maskMat = new THREE.MeshStandardMaterial({ color: effectiveExtraColor, roughness: 0.5 });
-        const maskGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.02, 16, 16);
-        const mask = new THREE.Mesh(maskGeo, maskMat);
-        this.headMesh.add(mask);
-    } else if (effectiveClothing.facepaint && effectiveClothing.facepaint !== 'none') {
-        const fpMat = new THREE.MeshStandardMaterial({ color: effectiveExtraColor, transparent: true, opacity: 0.85, roughness: 0.9 });
-        const fpGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.01, 16, 16, 0, Math.PI * 2, 0.2, 0.8);
-        const fp = new THREE.Mesh(fpGeo, fpMat);
-        fp.rotation.x = -Math.PI / 2.2;
-        this.headMesh.add(fp);
+
+    // MASK (suite alignment: per-style procedural builds on the accessory
+    // layer, named like the AshLane accessory registry for clean swaps).
+    const maskStyle = normalizeMaskStyle(effectiveClothing.mask);
+    const maskColor = effectiveClothing.maskColor || effectiveExtraColor;
+    if (maskStyle !== 'none') {
+        const maskGroup = new THREE.Group();
+        maskGroup.name = 'accessory:mask';
+        const maskMat = new THREE.MeshStandardMaterial({ color: maskColor, roughness: 0.5 });
+        const h = this.baseHeadSize;
+        if (maskStyle === 'eye_mask') {
+            // Band across the eyes with a strap around the head.
+            const bandGeo = new THREE.SphereGeometry(h * 1.02, 16, 16, 0, Math.PI * 2, Math.PI * 0.32, Math.PI * 0.22);
+            const band = new THREE.Mesh(bandGeo, maskMat);
+            maskGroup.add(band);
+            const strap = new THREE.Mesh(new THREE.TorusGeometry(h * 1.0, h * 0.08, 8, 24), maskMat);
+            strap.rotation.x = Math.PI / 2;
+            strap.position.y = h * 0.1;
+            maskGroup.add(strap);
+        } else if (maskStyle === 'half') {
+            // Lower-face shell.
+            const halfGeo = new THREE.SphereGeometry(h * 1.02, 16, 16, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55);
+            maskGroup.add(new THREE.Mesh(halfGeo, maskMat));
+        } else {
+            // Full shell (legacy 'warrior'/'skull' values land here).
+            const fullGeo = new THREE.SphereGeometry(h * 1.02, 16, 16);
+            maskGroup.add(new THREE.Mesh(fullGeo, maskMat));
+            if (maskStyle === 'lucha') {
+                // Lucha details: dark eye rims + lace band at the back.
+                const rimMat = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.6 });
+                const eyeZ = h * 0.8 * this.headScaleZ;
+                const eyeY = 0.08 * h;
+                const headScale = (cd.height / 100);
+                for (const sx of [-0.45, 0.45]) {
+                    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.028 * headScale, 0.007 * headScale, 8, 20), rimMat);
+                    rim.position.set(sx * h, eyeY, eyeZ);
+                    maskGroup.add(rim);
+                }
+                const lace = new THREE.Mesh(new THREE.TorusGeometry(h * 0.55, h * 0.07, 8, 20), rimMat);
+                lace.position.set(0, 0, -h * 0.85);
+                maskGroup.add(lace);
+            }
+        }
+        this.headMesh.add(maskGroup);
+    }
+
+    // HOOD (suite alignment). 'up' = shell over the head; 'down' = drape on
+    // the shoulders. Hangs from the head layer like the AshLane hood slot.
+    const hoodStyle = effectiveClothing.hood || 'none';
+    if (hoodStyle !== 'none') {
+        const hoodGroup = new THREE.Group();
+        hoodGroup.name = 'accessory:hood';
+        const hoodMat = new THREE.MeshStandardMaterial({ color: effectiveTopColor, roughness: 0.9 });
+        const h = this.baseHeadSize;
+        if (hoodStyle === 'up') {
+            const hoodGeo = new THREE.SphereGeometry(h * 1.18, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.62);
+            const hoodMesh = new THREE.Mesh(hoodGeo, hoodMat);
+            hoodMesh.position.set(0, h * 0.05, -h * 0.12);
+            hoodGroup.add(hoodMesh);
+        }
+        // Shoulder drape in both positions (hood rests on the shoulders when down).
+        const drape = new THREE.Mesh(
+            new THREE.SphereGeometry(h * 1.7, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.4),
+            hoodMat
+        );
+        drape.scale.set(1.4, 0.7, 1.1);
+        drape.position.set(0, -h * 2.6, -h * 0.3);
+        hoodGroup.add(drape);
+        this.headMesh.add(hoodGroup);
+    }
+
+    // CHAIN + PENDANT (suite alignment — the AshLane chain slot, ported
+    // procedurally). Pendant hangs plumb on the chest with its face toward
+    // the viewer (the pendant-orientation fix: never edge-on, never buried).
+    const chainStyle = effectiveClothing.chain || 'none';
+    if (chainStyle !== 'none') {
+        const chainGroup = new THREE.Group();
+        chainGroup.name = 'accessory:chain';
+        const chainColor = effectiveClothing.chainColor ||
+            (chainStyle === 'silver' ? '#c0c0c0' : chainStyle === 'spiked' ? '#8a6a1f' : '#d4af37');
+        const chainMat = new THREE.MeshStandardMaterial({ color: chainColor, metalness: 0.8, roughness: 0.35 });
+        const neckR = 0.085 * scale;
+        const chain = new THREE.Mesh(new THREE.TorusGeometry(neckR, 0.012 * scale, 8, 28), chainMat);
+        chain.rotation.x = Math.PI / 2.25; // sits on the neck base, tilted to the chest
+        chain.position.set(0, chestH / 2 - 0.01 * scale, 0.03 * scale);
+        chainGroup.add(chain);
+        if (chainStyle === 'spiked') {
+            for (let i = 0; i < 10; i++) {
+                const spike = new THREE.Mesh(new THREE.ConeGeometry(0.01 * scale, 0.035 * scale, 6), chainMat);
+                const a = (i / 10) * Math.PI * 2;
+                spike.position.set(Math.cos(a) * neckR, 0, Math.sin(a) * neckR);
+                spike.rotation.z = -a - Math.PI / 2;
+                chain.add(spike);
+            }
+        }
+        // Medallion pendant: flat face forward (+z), hanging plumb at the chest.
+        const pendant = new THREE.Mesh(
+            new THREE.BoxGeometry(0.055 * scale, 0.07 * scale, 0.015 * scale),
+            new THREE.MeshStandardMaterial({ color: cd.sigil || '#ffffff', metalness: 0.6, roughness: 0.3 })
+        );
+        const chestFront = (0.2 + fat * 0.3 + (p.chestSize - 1) * 0.1) / 2;
+        pendant.position.set(0, chestH * 0.12, chestFront + 0.02 * scale);
+        // Face-forward orientation: no rotation — the flat face looks at the camera.
+        chainGroup.add(pendant);
+        // Bail connector between chain and pendant.
+        const bail = new THREE.Mesh(new THREE.CylinderGeometry(0.008 * scale, 0.008 * scale, 0.05 * scale, 8), chainMat);
+        bail.position.set(0, chestH * 0.22, chestFront * 0.6);
+        chainGroup.add(bail);
+        this.bodyMesh.add(chainGroup);
     }
 
     // EYES
@@ -893,6 +1163,35 @@ export class Character3D {
                 strip.scale.y = 1 + Math.random() * 0.4;
                 this.hairGroup.add(strip);
             }
+} else if (cd.hairStyle === 'ponytail') {
+            // Cap on top + a tail trailing down the back of the head.
+            const capGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.03, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
+            this.hairGroup.add(new THREE.Mesh(capGeo, hairMat));
+            const tailLen = Math.max(4, Math.min(10, cd.hairLength || 6));
+            for (let i = 0; i < tailLen; i++) {
+                const piece = new THREE.Mesh(new THREE.SphereGeometry(this.baseHeadSize * (0.28 - i * 0.018), 8, 8), hairMat);
+                const k = i / tailLen;
+                piece.position.set(
+                    0,
+                    (0.9 - k * 2.4) * this.baseHeadSize,
+                    (-0.75 - k * 0.5) * this.baseHeadSize
+                );
+                this.hairGroup.add(piece);
+            }
+        } else if (cd.hairStyle === 'bun') {
+            // Topknot: cluster of spheres on the crown.
+            for (let i = 0; i < 9; i++) {
+                const piece = new THREE.Mesh(new THREE.SphereGeometry(this.baseHeadSize * 0.22, 8, 8), hairMat);
+                const angle = (i / 9) * Math.PI * 2;
+                piece.position.set(
+                    Math.cos(angle) * this.baseHeadSize * 0.25,
+                    this.baseHeadSize * (1.05 + Math.random() * 0.2),
+                    -this.baseHeadSize * 0.35 + Math.sin(angle) * this.baseHeadSize * 0.25
+                );
+                this.hairGroup.add(piece);
+            }
+            const capGeo = new THREE.SphereGeometry(this.baseHeadSize * 1.03, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
+            this.hairGroup.add(new THREE.Mesh(capGeo, hairMat));
         } else {
             const hairCount = cd.hairStyle === 'wild' ? 32 : 16;
             for(let i=0; i<hairCount; i++) {
@@ -966,6 +1265,14 @@ export class Character3D {
     const ankleGeo = new THREE.SphereGeometry(legW * 0.6, 8, 8);
     const footGeo = new THREE.BoxGeometry(legW * 0.9, 0.05 * scale, legW * 1.4);
 
+    // Shoe style (suite alignment): 'none' = barefoot, 'boots' = full shin
+    // (legacy 'regular' maps here), 'sneakers' = foot only, 'wrestling' =
+    // mid-shin, 'wraps' = bandage strips on skin.
+    const shoeStyle = normalizeShoeStyle(effectiveClothing.boots);
+    const shoeMat = new THREE.MeshStandardMaterial({
+        color: effectiveClothing.shoeColor || effectiveExtraColor, roughness: 0.7
+    });
+
     const createLeg = (posX: number) => {
         const thigh = new THREE.Mesh(thighGeo, bottomMat);
         thigh.position.set(posX, this.hips?.position.y ?? 0 - 0.1, 0);
@@ -985,12 +1292,13 @@ export class Character3D {
         thigh.add(knee);
         if (posX < 0) this.lKnee = knee; else this.rKnee = knee;
 
-        const shin = new THREE.Mesh(shinGeo, cd.clothing.boots !== 'none' ? extraMat : bottomMat);
+        const shinMat = (shoeStyle === 'boots' || shoeStyle === 'wrestling') ? shoeMat : bottomMat;
+        const shin = new THREE.Mesh(shinGeo, shinMat);
         shin.name = "shin";
         shin.position.set(0, -thighH / 2, 0);
         knee.add(shin);
 
-        const ankleJoint = new THREE.Mesh(ankleGeo, cd.clothing.boots !== 'none' ? extraMat : skinMat);
+        const ankleJoint = new THREE.Mesh(ankleGeo, shoeStyle !== 'none' ? shoeMat : skinMat);
         ankleJoint.name = "ankle_joint";
         ankleJoint.position.y = -thighH / 2;
         shin.add(ankleJoint);
@@ -1000,10 +1308,23 @@ export class Character3D {
         ankle.name = "ankle";
         ankleJoint.add(ankle);
 
-        const foot = new THREE.Mesh(footGeo, cd.clothing.boots !== 'none' ? extraMat : skinMat);
+        const foot = new THREE.Mesh(footGeo, shoeStyle !== 'none' ? shoeMat : skinMat);
         foot.name = "foot";
         foot.position.set(0, -0.02 * scale, legW * 0.3);
+        if (shoeStyle === 'sneakers') {
+            // Chunky sneaker profile.
+            foot.scale.set(1.15, 1.4, 1.25);
+        }
         ankle.add(foot);
+
+        if (shoeStyle === 'wraps') {
+            // Bandage strips around ankle and mid-foot (skin underneath).
+            for (let i = 0; i < 3; i++) {
+                const wrap = new THREE.Mesh(new THREE.BoxGeometry(legW * 1.0, 0.02 * scale, legW * 1.0), shoeMat);
+                wrap.position.y = -0.01 * scale - i * 0.025 * scale;
+                ankle.add(wrap);
+            }
+        }
 
         return thigh;
     };
@@ -1031,6 +1352,14 @@ export class Character3D {
     const armMat = effectiveClothing.top === 'bare' ? skinMat : topMat;
 
     const createArm = (posX: number, side: 'L' | 'R') => {
+        const gloveStyle = side === 'L' ? effectiveClothing.gloveL : effectiveClothing.gloveR;
+        const wristbandStyle = side === 'L' ? effectiveClothing.wristbandL : effectiveClothing.wristbandR;
+        const gloveMat = new THREE.MeshStandardMaterial({
+            color: effectiveClothing.gloveColor || effectiveExtraColor, roughness: 0.6
+        });
+        const wristbandMat = new THREE.MeshStandardMaterial({
+            color: effectiveClothing.wristbandColor || effectiveExtraColor, roughness: 0.7
+        });
         const bicep = new THREE.Mesh(bicepGeo, armMat);
         const bodyPosY = this.bodyMesh?.position.y ?? 0;
         bicep.position.set(posX, bodyPosY + 0.05, 0);
@@ -1048,16 +1377,26 @@ export class Character3D {
         bicep.add(elbow);
         if (side === 'L') this.lElbow = elbow; else this.rElbow = elbow;
 
-        const forearm = new THREE.Mesh(forearmGeo, (side === 'L' ? cd.clothing.gloveL : cd.clothing.gloveR) !== 'none' ? extraMat : skinMat);
+        const forearm = new THREE.Mesh(forearmGeo, gloveStyle !== 'none' ? gloveMat : skinMat);
         forearm.name = "forearm";
         forearm.position.set(0, -bicepH / 2, 0);
         elbow.add(forearm);
 
-        const wristJoint = new THREE.Mesh(wristJointGeo, (side === 'L' ? cd.clothing.gloveL : cd.clothing.gloveR) !== 'none' ? extraMat : skinMat);
+        const wristJoint = new THREE.Mesh(wristJointGeo, gloveStyle !== 'none' ? gloveMat : skinMat);
         wristJoint.name = "wrist_joint";
         wristJoint.position.y = -bicepH / 2;
         forearm.add(wristJoint);
         if (side === 'L') this.lWristMesh = wristJoint; else this.rWristMesh = wristJoint;
+
+        // Wristband (suite alignment: the game had UI options but no render path).
+        if (wristbandStyle && wristbandStyle !== 'none') {
+            const band = new THREE.Mesh(
+                new THREE.CylinderGeometry(bicepW * 0.62, bicepW * 0.66, 0.055 * scale, 10),
+                wristbandMat
+            );
+            band.name = 'wristband';
+            wristJoint.add(band);
+        }
 
         const wrist = new THREE.Group();
         wrist.name = "wrist";
@@ -1068,9 +1407,23 @@ export class Character3D {
         wrist.add(hand);
         if (side === 'L') this.lHandGroup = hand; else this.rHandGroup = hand;
 
-        const palm = new THREE.Mesh(handGeo, skinMat);
+        const palm = new THREE.Mesh(handGeo, gloveStyle === 'boxing' ? gloveMat : skinMat);
         palm.position.y = -bicepW * 0.2;
         hand.add(palm);
+
+        // Glove style details (suite alignment).
+        if (gloveStyle === 'boxing') {
+            // Oversized boxing glove: rounded shell over the hand.
+            const shell = new THREE.Mesh(new THREE.SphereGeometry(bicepW * 0.55, 12, 12), gloveMat);
+            shell.position.y = -bicepW * 0.35;
+            shell.scale.set(1, 1.25, 1.1);
+            hand.add(shell);
+        } else if (gloveStyle === 'mma' || gloveStyle === 'fingerless') {
+            // Open-finger pad over the palm knuckles.
+            const pad = new THREE.Mesh(new THREE.BoxGeometry(bicepW * 0.85, bicepW * 0.35, bicepW * 0.65), gloveMat);
+            pad.position.y = -bicepW * 0.28;
+            hand.add(pad);
+        }
 
         // Add 4 fingers
         for(let i=0; i<4; i++) {
@@ -1119,6 +1472,28 @@ export class Character3D {
     if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
     }
+  }
+
+  /**
+   * Dolly the preview camera (suite alignment: the AshLane customizer's
+   * zoomable live preview — drag rotates, wheel/pinch zooms).
+   * `distance` is clamped to 1.6 (close) .. 6.5 (far).
+   */
+  setZoom(distance: number) {
+    if (!this.camera) return;
+    const d = THREE.MathUtils.clamp(distance, 1.6, 6.5);
+    this.camera.position.set(0, 1.2, d);
+  }
+
+  /** Names of the accessory slots currently built into the model
+   * (e.g. "mask", "hood", "chain") — the suite's attach-registry pattern. */
+  accessorySlots(): string[] {
+    const out: string[] = [];
+    this.group.traverse((o) => {
+      const m = /^accessory:(.+)$/.exec(o.name || '');
+      if (m && !out.includes(m[1])) out.push(m[1]);
+    });
+    return out;
   }
 
   resize() {
