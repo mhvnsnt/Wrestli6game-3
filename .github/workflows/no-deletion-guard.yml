@@ -1,0 +1,26 @@
+name: no-deletion-guard
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fail if PR deletes files (unless labelled approved-deletion)
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          D=$(git diff --diff-filter=D --name-only "$BASE"..."$HEAD")
+          if [ -z "$D" ]; then echo "No deletions."; exit 0; fi
+          echo "Deleted files:"; echo "$D"
+          case ",$LABELS," in *,approved-deletion,*) echo "approved-deletion label present"; exit 0;; esac
+          echo "::error::PR deletes files. See docs/NO-DATA-LOSS-RULES.md. Owner must add label approved-deletion."
+          exit 1
