@@ -20,3 +20,9 @@ Instructions for every AI agent working in this repo.
 
 ## No-data-loss rules (MANDATORY)
 Read and follow [`docs/NO-DATA-LOSS-RULES.md`](docs/NO-DATA-LOSS-RULES.md) (canonical: mhvnsnt/agent-ops). No force-push, no rebase/amend of pushed work, no history rewrite, no branch/asset deletion without backup + owner approval, PRs only, empty D-filter + gitleaks + green CI before merge, push incrementally, keep WORKLOG, back up and sha256-verify before disk cleanup, never touch other agents' or Muse's work.
+
+## Sourcing rule (Mars, 2026-11-19)
+
+"Anytime there's things that aren't in my Steam library just remember just go get them from wherever else they can be gotten from."
+
+"I own like hundreds of games on Xbox and anytime I mention certain games you just have to go get them because I own so many games that are like on disc and on Xbox and there's no way to actually get them to you but you have to go use the games in the commercial files and the actual source anyway."
